@@ -1,7 +1,7 @@
 /**
  * @name VoiceMessages
  * @author Riolubruh
- * @version 0.0.2
+ * @version 0.0.3
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  * @updateUrl https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js
@@ -343,16 +343,16 @@ module.exports = (() => {
 				"discord_id": "359063827091816448",
 				"github_username": "riolubruh"
 			}],
-			"version": "0.0.2",
-			"description": "Unlock all screensharing modes, and use cross-server & GIF emotes!",
+			"version": "0.0.3",
+			"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 			"github": "https://github.com/riolubruh/VoiceMessages",
 			"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 		},
 		changelog: [
 			{
-				title: "0.0.2",
+				title: "0.0.3",
 				items: [
-					"Added the option to disable calculating the metadata for an audio file."
+					"Fixed missing/incorrect plugin description."
 				]
 			}
 		],
