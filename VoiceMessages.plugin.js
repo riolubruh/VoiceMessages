@@ -1,7 +1,7 @@
 /**
  * @name VoiceMessages
  * @author Riolubruh
- * @version 0.0.3
+ * @version 0.0.4
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  * @updateUrl https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js
@@ -52,7 +52,7 @@ const { React, Webpack, UI, Patcher } = BdApi;
 const { createElement, useState, useEffect, useMemo } = React;
 const ReactUtils = Webpack.getByKeys("openModalLazy");
 const { DiscordModules, WebpackModules, DiscordClasses, Toasts } = ZLibrary;
-const CloudUploader = WebpackModules.getByProps("CloudUpload", "CloudUploadStatus");
+const CloudUploader = WebpackModules.getByProps("m", "n").n;
 const EMPTY_META = {
 	waveform: "AAAAAAAAAAAA",
 	duration: 1,
@@ -173,7 +173,7 @@ function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 	);
 };
 
-const VoiceMessage = Webpack.getByKeys("renderVoiceMessageAudioComponent").renderVoiceMessageAudioComponent;
+const VoiceMessage = Webpack.getModules(BdApi.Webpack.Filters.byKeys("Z")).filter(obj => obj.Z.type).filter(obj => obj.Z.type.toString().includes("waveform:"))[0].Z;
 
 function useTimer({ interval = 1000, deps = [] }) {
 	const [time, setTime] = useState(0);
@@ -245,7 +245,6 @@ function chooseFile(mimeTypes) {
 	});
 }
 
-const Constants = WebpackModules.getByProps("Endpoints");
 const MessageActions = WebpackModules.getByProps("getSendMessageOptionsForReply");
 
 function Icon({ height = 24, width = 24, className, children, viewBox, ...svgProps }) {
@@ -283,6 +282,7 @@ function Microphone(props) {
 }
 
 const dispatcher = Webpack.getByKeys("dispatch", "subscribe");
+const HTTP = WebpackModules.getAllByProps("Z").filter(obj => obj.Z.post)[0].Z;
 
 async function sendAudio(blob, meta) {
 	if (!blob) return;
@@ -297,7 +297,7 @@ async function sendAudio(blob, meta) {
 	const reply = Webpack.getStore("PendingReplyStore").getPendingReply(channelId);
 	if (reply) dispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
 
-	const upload = new CloudUploader.CloudUpload({
+	const upload = await new CloudUploader({
 		file: new File([blob], "voice-message.ogg", { type: "audio/ogg; codecs=opus" }),
 		isClip: false,
 		isThumbnail: false,
@@ -305,8 +305,8 @@ async function sendAudio(blob, meta) {
 	}, channelId, false, 0);
 
 	upload.on("complete", () => {
-		WebpackModules.getByProps("HTTP").HTTP.post({
-			url: Constants.Endpoints.MESSAGES(channelId),
+		HTTP.post({
+			url: `/channels/${channelId}/messages`,
 			body: {
 				flags: 1 << 13,
 				channel_id: channelId,
@@ -324,15 +324,15 @@ async function sendAudio(blob, meta) {
 				message_reference: reply ? MessageActions.getSendMessageOptionsForReply(reply)?.messageReference : null,
 			}
 		});
-	})
+	});
 	upload.on("error", () => UI.showToast("Failed to upload voice message", Toasts.ToastTypes.error));
-
+	console.log(upload);
 	upload.upload();
 }
 
 const OptionClasses = Webpack.getByKeys("optionLabel");
 const PermissionStore = Webpack.getStore("PermissionStore");
-const PopoutMenuModule = WebpackModules.getAllByProps("default").filter(obj => obj.default.toString().includes("Send Attachment"))[0];
+const PopoutMenuModule = WebpackModules.getAllByProps("Z").filter(obj => obj.Z.toString().includes("Send Attachment"))[0];
 
 module.exports = (() => {
 	const config = {
@@ -343,16 +343,16 @@ module.exports = (() => {
 				"discord_id": "359063827091816448",
 				"github_username": "riolubruh"
 			}],
-			"version": "0.0.3",
+			"version": "0.0.4",
 			"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 			"github": "https://github.com/riolubruh/VoiceMessages",
 			"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 		},
 		changelog: [
 			{
-				title: "0.0.3",
+				title: "0.0.4",
 				items: [
-					"Fixed missing/incorrect plugin description."
+					"Fixed plugin after Discord update broke everything."
 				]
 			}
 		],
@@ -561,7 +561,7 @@ module.exports = (() => {
 				}
 
 				patchPopoutMenu() {
-					Patcher.after(this.getName(), PopoutMenuModule, "default", (_, [args], ret) => {
+					Patcher.after(this.getName(), PopoutMenuModule, "Z", (_, [args], ret) => {
 						//											  SEND_VOICE_MESSAGES											 SEND_MESSAGES
 						if (args.channel.guild_id && !(PermissionStore.can(1n << 46n, args.channel) && PermissionStore.can(1n << 11n, args.channel)))
 							return;
