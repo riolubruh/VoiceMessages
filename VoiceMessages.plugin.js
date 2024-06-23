@@ -1,7 +1,7 @@
 /**
  * @name VoiceMessages
  * @author Riolubruh
- * @version 0.0.4
+ * @version 0.0.5
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  * @updateUrl https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js
@@ -343,16 +343,16 @@ module.exports = (() => {
 				"discord_id": "359063827091816448",
 				"github_username": "riolubruh"
 			}],
-			"version": "0.0.4",
+			"version": "0.0.5",
 			"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 			"github": "https://github.com/riolubruh/VoiceMessages",
 			"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 		},
 		changelog: [
 			{
-				title: "0.0.4",
+				title: "0.0.5",
 				items: [
-					"Fixed plugin after Discord update broke everything."
+					"Fix plugin not triggering update."
 				]
 			}
 		],
@@ -392,17 +392,12 @@ module.exports = (() => {
 	} : (([Plugin, Api]) => {
 		const plugin = (Plugin, Api) => {
 			const {
-				DiscordModules,
 				Settings,
 				Toasts,
 				Utilities,
-				WebpackModules,
-				DiscordClassModules,
 				DiscordClasses,
 				PluginUpdater,
-				Logger,
-				ContextMenu,
-				Modals
+				ContextMenu
 			} = Api;
 			return class VoiceMessages extends Plugin {
 				defaultSettings = {
@@ -598,6 +593,7 @@ module.exports = (() => {
 
 
 				onStart() {
+					PluginUpdater.checkForUpdate(this.getName(), this.getVersion(), this._config.info.github_raw);
 					Patcher.unpatchAll(this.getName())
 					this.patchPopoutMenu();
 					BdApi.DOM.addStyle(this.getName(), `
