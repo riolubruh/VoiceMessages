@@ -1,7 +1,7 @@
 /**
  * @name VoiceMessages
  * @author Riolubruh
- * @version 0.0.5
+ * @version 0.0.6
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  * @updateUrl https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js
@@ -343,16 +343,17 @@ module.exports = (() => {
 				"discord_id": "359063827091816448",
 				"github_username": "riolubruh"
 			}],
-			"version": "0.0.5",
+			"version": "0.0.6",
 			"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 			"github": "https://github.com/riolubruh/VoiceMessages",
 			"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 		},
 		changelog: [
 			{
-				title: "0.0.5",
+				title: "0.0.6",
 				items: [
-					"Fix plugin not triggering update."
+					"Implemented Vencord's voiceDownload plugin, adding a download button to voice messages!",
+					"Fix Library Missing dialog not downloading ZPL properly."
 				]
 			}
 		],
@@ -380,8 +381,9 @@ module.exports = (() => {
 				confirmText: "Download Now",
 				cancelText: "Cancel",
 				onConfirm: () => {
-					require("request").get("https://rauenzi.github.io/BDPluginLibrary/release/0PluginLibrary.plugin.js", async (error, response, body) => {
-						if (error) return require("electron").shell.openExternal("https://raw.githubusercontent.com/rauenzi/BDPluginLibrary/master/release/0PluginLibrary.plugin.js");
+					BdApi.Net.fetch("https://raw.githubusercontent.com/zerebos/BDPluginLibrary/master/release/0PluginLibrary.plugin.js", {method:"GET"}).then(async res => {
+						if (!res.ok) return require("electron").shell.openExternal("https://raw.githubusercontent.com/zerebos/BDPluginLibrary/master/release/0PluginLibrary.plugin.js");
+						let body = await res.text();
 						await new Promise(r => require("fs").writeFile(require("path").join(BdApi.Plugins.folder, "0PluginLibrary.plugin.js"), body, r));
 					});
 				}
@@ -401,11 +403,13 @@ module.exports = (() => {
 			} = Api;
 			return class VoiceMessages extends Plugin {
 				defaultSettings = {
-					"skipMetadata": false
+					"skipMetadata": false,
+					"voiceDownload": true
 				}
 				getSettingsPanel() {
 					return Settings.SettingPanel.build(_ => this.saveAndUpdate(), ...[
 						new Settings.Switch("Skip Metadata Calculation", "Skips processing the metadata of the audio file. Prevents a crash when attempting to upload really long audio files, but causes a flat waveform.", this.settings.skipMetadata, value => this.settings.skipMetadata = value),
+						new Settings.Switch("Voice Download", "Enables my port of Vencord's voiceDownload plugin to BetterDiscord, adding a download button to voice messages.", this.settings.voiceDownload, value => this.settings.voiceDownload = value),
 					])
 				}
 
@@ -415,6 +419,7 @@ module.exports = (() => {
 					Utilities.saveSettings(this.getName(), this.settings);
 					BdApi.Patcher.unpatchAll(this.getName());
 					this.patchPopoutMenu();
+					if(this.settings.voiceDownload) this.patchVoiceMessage();
 				}
 
 				VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
@@ -591,11 +596,32 @@ module.exports = (() => {
 					});
 				}
 
+				patchVoiceMessage(){
+					BdApi.Patcher.after(this.getName(), VoiceMessage, "type", (_,[args],ret) => {
+						ret.props.children.push(React.createElement("a", {
+							className: "vc-voice-download",
+							href: args.item.downloadUrl,
+							onClick: function (e){e => e.stopPropagation()},
+							ariaLabel: "Download voice message",
+							target: "_blank",
+							download: "voice-message.ogg",
+							children: React.createElement("svg", {
+								height: "24",
+								width: "24",
+								viewBox: "0 0 24 24",
+								fill:"currentColor",
+								children: React.createElement("path", {
+									d: "M12 2a1 1 0 0 1 1 1v10.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V3a1 1 0 0 1 1-1ZM3 20a1 1 0 1 0 0 2h18a1 1 0 1 0 0-2H3Z"
+								})
+							})
+						}));
+					});
+				}
+
 
 				onStart() {
 					PluginUpdater.checkForUpdate(this.getName(), this.getVersion(), this._config.info.github_raw);
 					Patcher.unpatchAll(this.getName())
-					this.patchPopoutMenu();
 					BdApi.DOM.addStyle(this.getName(), `
 						.vc-vmsg-modal {
 							padding: 1em;
@@ -651,7 +677,21 @@ module.exports = (() => {
 							flex: 1;
 							text-align: center;
 						}
+
+						.vc-voice-download {
+							width: 24px;
+							height: 24px;
+							color: var(--interactive-normal);
+							margin-left: 12px;
+							cursor: pointer;
+							position: relative;
+						}
+
+						.vc-voice-download:hover {
+							color: var(--interactive-active);
+						}
 					`)
+					this.saveAndUpdate();
 				}
 
 				onStop() {
