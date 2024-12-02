@@ -1,10 +1,9 @@
 /**
  * @name VoiceMessages
  * @author Riolubruh
- * @version 0.0.6
+ * @version 0.0.7
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
- * @updateUrl https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js
  */
 /*@cc_on
 @if(@_jscript)
@@ -343,17 +342,16 @@ module.exports = (() => {
 				"discord_id": "359063827091816448",
 				"github_username": "riolubruh"
 			}],
-			"version": "0.0.6",
+			"version": "0.0.7",
 			"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 			"github": "https://github.com/riolubruh/VoiceMessages",
 			"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 		},
 		changelog: [
 			{
-				title: "0.0.6",
+				title: "0.0.7",
 				items: [
-					"Implemented Vencord's voiceDownload plugin, adding a download button to voice messages!",
-					"Fix Library Missing dialog not downloading ZPL properly."
+					"Remove manually checking for updates for BD website submission"
 				]
 			}
 		],
@@ -620,7 +618,6 @@ module.exports = (() => {
 
 
 				onStart() {
-					PluginUpdater.checkForUpdate(this.getName(), this.getVersion(), this._config.info.github_raw);
 					Patcher.unpatchAll(this.getName())
 					BdApi.DOM.addStyle(this.getName(), `
 						.vc-vmsg-modal {
