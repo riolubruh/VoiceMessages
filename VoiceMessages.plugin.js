@@ -47,11 +47,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-const { React, Webpack, UI, Patcher } = BdApi;
+const { React, Webpack, UI, Patcher, DOM } = BdApi;
 const { createElement, useState, useEffect, useMemo } = React;
 const ReactUtils = Webpack.getByKeys("openModalLazy");
-const { DiscordModules, WebpackModules, DiscordClasses, Toasts } = ZLibrary;
-const CloudUploader = WebpackModules.getByProps("m", "n").n;
+const CloudUploader = Webpack.getByKeys("m", "n").n;
 const EMPTY_META = {
 	waveform: "AAAAAAAAAAAA",
 	duration: 1,
@@ -133,15 +132,15 @@ function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 		if (nowRecording) {
 			discordVoice.startLocalAudioRecording(
 				{
-					echoCancellation: DiscordModules.VoiceInfo.getEchoCancellation(),
-					noiseCancellation: DiscordModules.VoiceInfo.getNoiseSuppression,
+					echoCancellation: Webpack.getStore("MediaEngineStore").getEchoCancellation(),
+					noiseCancellation: Webpack.getStore("MediaEngineStore").getNoiseSuppression,
 				},
 				(success) => {
 					if (success) {
 						changeRecording(true);
 
 					} else
-						UI.showToast("Failed to start recording", Toasts.ToastTypes.error);
+						UI.showToast("Failed to start recording", {type:"error"});
 				}
 			);
 		} else {
@@ -152,7 +151,7 @@ function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 						setAudioBlob(new Blob([buf], { type: "audio/ogg; codecs=opus" }));
 					}
 					else
-						UI.showToast("Failed to finish recording", Toasts.ToastTypes.error);
+						UI.showToast("Failed to finish recording", {type:"error"});
 				}
 				changeRecording(false);
 			});
@@ -172,7 +171,7 @@ function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 	);
 };
 
-const VoiceMessage = Webpack.getModules(BdApi.Webpack.Filters.byKeys("Z")).filter(obj => obj.Z.type).filter(obj => obj.Z.type.toString().includes("waveform:"))[0].Z;
+const VoiceMessage = Webpack.getModules(Webpack.Filters.byKeys("Z")).filter(obj => obj.Z?.type).filter(obj => obj.Z.type.toString().includes("waveform:"))[0].Z;
 
 function useTimer({ interval = 1000, deps = [] }) {
 	const [time, setTime] = useState(0);
@@ -211,17 +210,17 @@ function VoicePreview({ src, waveform, recording }) {
 	}
 
 	return createElement("div", {
-		className: (() => { return ("vc-vmsg-preview" + (recording ? " vc-vmsg-preview-recording" : "")) })(),
+		className: (() => { return ("vmsg-preview" + (recording ? " vmsg-preview-recording" : "")) })(),
 		children: [
 			createElement("div", {
-				className: "vc-vmsg-preview-indicator",
+				className: "vmsg-preview-indicator",
 			}),
 			createElement("div", {
-				className: "vc-vmsg-preview-time",
+				className: "vmsg-preview-time",
 				children: durationDisplay
 			}),
 			createElement("div", {
-				className: "vc-vmsg-preview-label",
+				className: "vmsg-preview-label",
 				children: (() => { return (recording ? "RECORDING" : "----") })()
 			})
 		]
@@ -244,11 +243,11 @@ function chooseFile(mimeTypes) {
 	});
 }
 
-const MessageActions = WebpackModules.getByProps("getSendMessageOptionsForReply");
+const MessageActions = Webpack.getByKeys("getSendMessageOptionsForReply");
 
 function Icon({ height = 24, width = 24, className, children, viewBox, ...svgProps }) {
 	return createElement("svg", {
-		className: `${className} vc-icon`,
+		className: `${className} vmsg-icon`,
 		role: "img",
 		width,
 		height,
@@ -261,7 +260,7 @@ function Icon({ height = 24, width = 24, className, children, viewBox, ...svgPro
 function Microphone(props) {
 	return createElement(Icon, {
 		...props,
-		className: `${props.className} vc-microphone`,
+		className: `${props.className} vmsg-microphone`,
 		viewBox: "0 0 24 24",
 		children: [
 			createElement("path", {
@@ -281,14 +280,14 @@ function Microphone(props) {
 }
 
 const dispatcher = Webpack.getByKeys("dispatch", "subscribe");
-const HTTP = WebpackModules.getAllByProps("Z").filter(obj => obj.Z.post)[0].Z;
+const HTTP = Webpack.getAllByKeys("Z").filter(obj => obj.Z?.post)[0].Z;
 
 async function sendAudio(blob, meta) {
 	if (!blob) return;
 	if (!meta) meta = EMPTY_META;
 
 	if (blob.size == 0) {
-		UI.showToast("Voice message data was empty. Aborted upload.", Toasts.ToastTypes.error);
+		UI.showToast("Voice message data was empty. Aborted upload.", {type:"error"});
 		return;
 	}
 
@@ -324,14 +323,14 @@ async function sendAudio(blob, meta) {
 			}
 		});
 	});
-	upload.on("error", () => UI.showToast("Failed to upload voice message", Toasts.ToastTypes.error));
+	upload.on("error", () => UI.showToast("Failed to upload voice message", {type:"error"}));
 	console.log(upload);
 	upload.upload();
 }
 
 const OptionClasses = Webpack.getByKeys("optionLabel");
 const PermissionStore = Webpack.getStore("PermissionStore");
-const PopoutMenuModule = WebpackModules.getAllByProps("Z").filter(obj => obj.Z.toString().includes("Send Attachment"))[0];
+const PopoutMenuModule = Webpack.getAllByKeys("Z").filter(obj => obj.Z?.toString().includes("Send Attachment"))[0];
 
 module.exports = (() => {
 	const config = {
@@ -415,7 +414,7 @@ module.exports = (() => {
 
 				saveAndUpdate() { //Saves and updates settings and runs functions
 					Utilities.saveSettings(this.getName(), this.settings);
-					BdApi.Patcher.unpatchAll(this.getName());
+					Patcher.unpatchAll(this.getName());
 					this.patchPopoutMenu();
 					if(this.settings.voiceDownload) this.patchVoiceMessage();
 				}
@@ -484,10 +483,10 @@ module.exports = (() => {
 								]
 							}),
 							createElement(ReactUtils.ModalContent, {
-								className: "vc-vmsg-modal",
+								className: "vmsg-modal",
 								children: [
 									createElement("div", {
-										className: "vc-vmsg-buttons",
+										className: "vmsg-buttons",
 										children: [
 											createElement(VoiceRecorder, {
 												setAudioBlob: (blob) => {
@@ -520,13 +519,13 @@ module.exports = (() => {
 									(() => {
 										if (isUnsupportedFormat) {
 											return createElement(ReactUtils.Card, {
-												className: `vc-plugins-restart-card ${DiscordClasses.Margins.marginTop20}`,
+												className: `vmsg-plugins-restart-card ${Webpack.getByKeys("marginTop20").marginTop20}`,
 												children: [
 													createElement(ReactUtils.FormText, {
 														children: `Voice Messages have to be OggOpus to be playable on iOS. This file is ${blob.type} so it will not be playable on iOS.`
 													}),
 													createElement(ReactUtils.FormText, {
-														className: DiscordClasses.Margins.marginTop8,
+														className: Webpack.getByKeys("marginTop8").marginTop8,
 														children: [
 															`To fix it, first convert it to OggOpus, for example using the `,
 															createElement(ReactUtils.Anchor, {
@@ -548,7 +547,7 @@ module.exports = (() => {
 										onClick: async () => {
 											modalProps.onClose();
 											sendAudio(blob, meta);
-											UI.showToast("Now sending voice message... Please be patient", Toasts.ToastTypes.info.MESSAGE);
+											UI.showToast("Now sending voice message... Please be patient", {type:"info"});
 										},
 										children: "Send"
 									})
@@ -565,7 +564,7 @@ module.exports = (() => {
 							return;
 
 						ret.props.children.push(ContextMenu.buildMenuItem({
-							id: "vc-send-vmsg",
+							id: "vmsg-send-vmsg",
 							label: createElement("div", {
 								className: OptionClasses.optionLabel,
 								children: [
@@ -595,9 +594,9 @@ module.exports = (() => {
 				}
 
 				patchVoiceMessage(){
-					BdApi.Patcher.after(this.getName(), VoiceMessage, "type", (_,[args],ret) => {
+					Patcher.after(this.getName(), VoiceMessage, "type", (_,[args],ret) => {
 						ret.props.children.push(React.createElement("a", {
-							className: "vc-voice-download",
+							className: "vmsg-voice-download",
 							href: args.item.downloadUrl,
 							onClick: function (e){e => e.stopPropagation()},
 							ariaLabel: "Download voice message",
@@ -619,23 +618,23 @@ module.exports = (() => {
 
 				onStart() {
 					Patcher.unpatchAll(this.getName())
-					BdApi.DOM.addStyle(this.getName(), `
-						.vc-vmsg-modal {
+					DOM.addStyle(this.getName(), `
+						.vmsg-modal {
 							padding: 1em;
 						}
 						
-						.vc-vmsg-buttons {
+						.vmsg-buttons {
 							display: grid;
 							grid-template-columns: repeat(3, minmax(0, 1fr));
 							gap: 0.5em;
 							margin-bottom: 1em;
 						}
 						
-						.vc-vmsg-modal audio {
+						.vmsg-modal audio {
 							width: 100%;
 						}
 						
-						.vc-vmsg-preview {
+						.vmsg-preview {
 							color: var(--text-normal);
 							border-radius: 24px;
 							background-color: var(--background-secondary);
@@ -646,7 +645,7 @@ module.exports = (() => {
 							height: 48px;
 						}
 						
-						.vc-vmsg-preview-indicator {
+						.vmsg-preview-indicator {
 							background: var(--button-secondary-background);
 							width: 16px;
 							height: 16px;
@@ -654,11 +653,11 @@ module.exports = (() => {
 							transition: background 0.2s ease-in-out;
 						}
 						
-						.vc-vmsg-preview-recording .vc-vmsg-preview-indicator {
+						.vmsg-preview-recording .vm-vmsg-preview-indicator {
 							background: var(--status-danger);
 						}
 						
-						.vc-vmsg-preview-time {
+						.vmsg-preview-time {
 							opacity: 0.8;
 							margin: 0 0.5em;
 							font-size: 80%;
@@ -667,7 +666,7 @@ module.exports = (() => {
 							font-family: var(--font-code);
 						}
 						
-						.vc-vmsg-preview-label {
+						.vmsg-preview-label {
 							opacity: 0.5;
 							letter-spacing: 0.125em;
 							font-weight: 600;
@@ -675,7 +674,7 @@ module.exports = (() => {
 							text-align: center;
 						}
 
-						.vc-voice-download {
+						.vmsg-voice-download {
 							width: 24px;
 							height: 24px;
 							color: var(--interactive-normal);
@@ -684,7 +683,7 @@ module.exports = (() => {
 							position: relative;
 						}
 
-						.vc-voice-download:hover {
+						.vmsg-voice-download:hover {
 							color: var(--interactive-active);
 						}
 					`)
@@ -693,7 +692,7 @@ module.exports = (() => {
 
 				onStop() {
 					Patcher.unpatchAll(this.getName());
-					BdApi.DOM.removeStyle(this.getName());
+					DOM.removeStyle(this.getName());
 				}
 
 
