@@ -369,7 +369,7 @@ const OptionClasses = Webpack.getByKeys("optionLabel");
 const PermissionStore = Webpack.getStore("PermissionStore");
 const PopoutMenuModule = Webpack.getAllByKeys("Z").filter(obj => obj.Z.toString().includes("Send Attachment"))[0];
 
-module.exports = class YABDP4Nitro {
+module.exports = class VoiceMessages {
 	constructor(meta) {
 		this.meta = meta;
 	}
