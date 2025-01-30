@@ -2,7 +2,7 @@
  * @name VoiceMessages
  * @author Riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.0.8
+ * @version 0.0.9
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -47,6 +47,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+
+// #region Constants
 const config = {
 	"info": {
 		"name": "VoiceMessages",
@@ -55,19 +57,20 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.0.8",
+		"version": "0.0.9",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.0.8",
+			title: "0.0.9",
 			items: [
-				"Remove dependency on ZeresPluginLibrary due to deprecation.",
-				"Implemented new changelog to replace ZPL's.",
-				"Implemented new settings panel.",
-				"Provide fallback value for downloadUrl to prevent an error appearing in console."
+				"Moved all constants to the top of the file since it was messy.",
+				"Reorganized code into constants, modules, global functions, and react elements sections.",
+				"Rename classes to replace \"vc-\" prefix with \"bd-\".",
+				"Fixed defaultSettings and settings being global.",
+				"Made the module filter for getting CloudUploader better."
 			]
 		}
 	],
@@ -77,23 +80,39 @@ const config = {
 	],
 	"main": "VoiceMessages.plugin.js"
 };
-settings = {};
-defaultSettings = {
+const defaultSettings = {
 	"skipMetadata": false,
 	"voiceDownload": true
 }
-const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger } = BdApi;
-const { createElement, useState, useEffect, useMemo } = React;
-const MarginClasses = Webpack.getByKeys("marginTop20", "marginTop8");
-const ReactUtils = Webpack.getByKeys("openModalLazy");
-const VoiceInfo = Webpack.getByKeys("getEchoCancellation");
-const CloudUploader = Webpack.getByKeys("m", "n").n;
 const EMPTY_META = {
 	waveform: "AAAAAAAAAAAA",
 	duration: 1,
 };
-const fs = require("fs");
+// #endregion
 
+let settings = {};
+
+// #region Modules
+const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins } = BdApi;
+const { createElement, useState, useEffect, useMemo } = React;
+const MarginClasses = Webpack.getByKeys("marginTop20", "marginTop8");
+const ReactUtils = Webpack.getByKeys("openModalLazy");
+const VoiceInfo = Webpack.getByKeys("getEchoCancellation");
+const CloudUploader = Webpack.getModule(Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), {searchExports:true});
+const fs = require("fs");
+const VoiceMessage = Webpack.getModules(Webpack.Filters.byKeys("Z")).filter(obj => obj.Z.type).filter(obj => obj.Z.type.toString().includes("waveform:"))[0].Z;
+const MessageActions = Webpack.getByKeys("getSendMessageOptionsForReply");
+const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
+const dispatcher = Webpack.getByKeys("dispatch", "subscribe");
+const HTTP = Webpack.getAllByKeys("Z").filter(obj => obj.Z.post)[0].Z;
+const SelectedChannelStore = Webpack.getStore("SelectedChannelStore");
+const PendingReplyStore = Webpack.getStore("PendingReplyStore");
+const OptionClasses = Webpack.getByKeys("optionLabel");
+const PermissionStore = Webpack.getStore("PermissionStore");
+const PopoutMenuModule = Webpack.getAllByKeys("Z").filter(obj => obj.Z.toString().includes("Send Attachment"))[0];
+// #endregion
+
+// #region Global Functions
 function useObjectUrl() {
 	const [url, setUrl] = useState("");
 	const setWithFree = (blob) => {
@@ -139,7 +158,223 @@ function useAwaiter(factory, providedOpts) {
 	return [state.value, state.error, state.pending];
 }
 
-const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
+function useTimer({ interval = 1000, deps = [] }) { //A timer to count how long the voice message is when you are recording.
+	const [time, setTime] = useState(0);
+	const start = useMemo(() => Date.now(), deps);
+
+	useEffect(() => {
+		const intervalId = setInterval(() => setTime(Date.now() - start), interval);
+
+		return () => {
+			setTime(0);
+			clearInterval(intervalId);
+		};
+	}, deps);
+
+	return time;
+}
+
+function chooseFile(mimeTypes) { //Makes the choose file dialog appear and returns the resulting file
+	return new Promise(resolve => {
+		const input = document.createElement("input");
+		input.type = "file";
+		input.style.display = "none";
+		input.accept = mimeTypes;
+		input.onchange = async () => {
+			resolve(input.files?.[0] ?? null);
+		};
+
+		document.body.appendChild(input);
+		input.click();
+		setImmediate(() => document.body.removeChild(input));
+	});
+}
+
+async function sendAudio(blob, meta) { //Sends the voice message
+	if (!blob) return;
+	if (!meta) meta = EMPTY_META;
+
+	if (blob.size == 0) {
+		UI.showToast("Voice message data was empty. Aborted upload.", { type: "error" });
+		return;
+	}
+
+	const channelId = SelectedChannelStore.getCurrentlySelectedChannelId();
+	const reply = PendingReplyStore.getPendingReply(channelId);
+	if (reply) dispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
+
+	const upload = await new CloudUploader({
+		file: new File([blob], "voice-message.ogg", { type: "audio/ogg; codecs=opus" }),
+		isClip: false,
+		isThumbnail: false,
+		platform: 1,
+	}, channelId, false, 0);
+
+	upload.on("complete", () => {
+		HTTP.post({
+			url: `/channels/${channelId}/messages`,
+			body: {
+				flags: 1 << 13,
+				channel_id: channelId,
+				content: "",
+				nonce: Date.now(),
+				sticker_ids: [],
+				type: 0,
+				attachments: [{
+					id: "0",
+					filename: upload.filename,
+					uploaded_filename: upload.uploadedFilename,
+					waveform: meta.waveform,
+					duration_secs: meta.duration
+				}],
+				message_reference: reply ? MessageActions.getSendMessageOptionsForReply(reply)?.messageReference : null,
+			}
+		});
+	});
+	upload.on("error", () => UI.showToast("Failed to upload voice message", { type: "error" }));
+	
+	upload.upload();
+}
+// #endregion
+
+// #region React Elements
+function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
+	const [isRecording, setRecording] = useState(false);
+	const [blob, setBlob] = useState();
+	const [blobUrl, setBlobUrl] = useObjectUrl();
+
+	useEffect(() => () => {
+		if (blobUrl)
+			URL.revokeObjectURL(blobUrl);
+	}, [blobUrl]);
+
+	const [meta] = useAwaiter(async () => {
+		if (!blob) return EMPTY_META;
+		if (shouldSkipMetadata) {
+			return EMPTY_META;
+		}
+		const audioContext = new AudioContext();
+		const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
+		const channelData = audioBuffer.getChannelData(0);
+
+		const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
+		// average the samples into much lower resolution bins, maximum of 256 total bins
+		const bins = new Uint8Array(clamp(Math.floor(audioBuffer.duration * 10), Math.min(32, channelData.length), 256));
+		const samplesPerBin = Math.floor(channelData.length / bins.length);
+
+		// Get root mean square of each bin
+		for (let binIdx = 0; binIdx < bins.length; binIdx++) {
+			let squares = 0;
+			for (let sampleOffset = 0; sampleOffset < samplesPerBin; sampleOffset++) {
+				const sampleIdx = binIdx * samplesPerBin + sampleOffset;
+				squares += channelData[sampleIdx] ** 2;
+			}
+			bins[binIdx] = ~~(Math.sqrt(squares / samplesPerBin) * 0xFF);
+		}
+
+		// Normalize bins with easing
+		const maxBin = Math.max(...bins);
+		const ratio = 1 + (0xFF / maxBin - 1) * Math.min(1, 100 * (maxBin / 0xFF) ** 3);
+		for (let i = 0; i < bins.length; i++) bins[i] = Math.min(0xFF, ~~(bins[i] * ratio));
+
+		return {
+			waveform: window.btoa(String.fromCharCode(...bins)),
+			duration: audioBuffer.duration,
+		};
+	}, {
+		deps: [blob],
+		fallbackValue: EMPTY_META,
+	});
+
+	const isUnsupportedFormat = blob && (
+		!blob.type.startsWith("audio/ogg")
+		|| blob.type.includes("codecs") && !blob.type.includes("opus")
+	);
+
+	return createElement(ReactUtils.ModalRoot, {
+		transitionState: ReactUtils.ModalTransitionState.ENTERING,
+		children: [
+			createElement(ReactUtils.ModalHeader, {
+				children: [
+					createElement(ReactUtils.FormTitle, {
+						children: "Record Voice Message"
+					})
+				]
+			}),
+			createElement(ReactUtils.ModalContent, {
+				className: "bd-vmsg-modal",
+				children: [
+					createElement("div", {
+						className: "bd-vmsg-buttons",
+						children: [
+							createElement(VoiceRecorder, {
+								setAudioBlob: (blob) => {
+									setBlob(blob);
+									setBlobUrl(blob);
+								},
+								onRecordingChange: setRecording
+							}),
+							createElement(ReactUtils.Button, {
+								onClick: async () => {
+									const file = await chooseFile("audio/*");
+									if (file) {
+										setBlob(file);
+										setBlobUrl(file);
+									}
+								},
+								children: "Upload File",
+								style: {
+									marginTop: "10px"
+								}
+							})
+						]
+					}),
+					createElement(ReactUtils.FormTitle, { children: "Preview" }),
+					createElement(VoicePreview, {
+						src: blobUrl,
+						waveform: meta?.waveform,
+						recording: isRecording
+					}),
+					(() => {
+						if (isUnsupportedFormat) {
+							return createElement(ReactUtils.Card, {
+								className: `bd-plugins-restart-card ${MarginClasses.marginTop20}`,
+								children: [
+									createElement(ReactUtils.FormText, {
+										children: `Voice Messages have to be OggOpus to be playable on iOS. This file is ${blob.type} so it will not be playable on iOS.`
+									}),
+									createElement(ReactUtils.FormText, {
+										className: MarginClasses.marginTop8,
+										children: [
+											`To fix it, first convert it to OggOpus, for example using the `,
+											createElement(ReactUtils.Anchor, {
+												href: "https://convertio.co/mp3-opus/",
+												children: "convertio web converter"
+											})
+										]
+									})
+								]
+							})
+						}
+					})()
+				]
+			}),
+			createElement(ReactUtils.ModalFooter, {
+				children: [
+					createElement(ReactUtils.Button, {
+						disabled: !blob,
+						onClick: async () => {
+							modalProps.onClose();
+							sendAudio(blob, meta);
+							UI.showToast("Now sending voice message... Please be patient", { type: "info" });
+						},
+						children: "Send"
+					})
+				]
+			})
+		]
+	})
+}
 
 function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 	const [recording, setRecording] = useState(false);
@@ -208,24 +443,6 @@ function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 	);
 };
 
-const VoiceMessage = Webpack.getModules(BdApi.Webpack.Filters.byKeys("Z")).filter(obj => obj.Z.type).filter(obj => obj.Z.type.toString().includes("waveform:"))[0].Z;
-
-function useTimer({ interval = 1000, deps = [] }) {
-	const [time, setTime] = useState(0);
-	const start = useMemo(() => Date.now(), deps);
-
-	useEffect(() => {
-		const intervalId = setInterval(() => setTime(Date.now() - start), interval);
-
-		return () => {
-			setTime(0);
-			clearInterval(intervalId);
-		};
-	}, deps);
-
-	return time;
-}
-
 function VoicePreview({ src, waveform, recording }) {
 	if (!waveform) waveform = EMPTY_META.waveform;
 	const durationMs = useTimer({
@@ -247,44 +464,26 @@ function VoicePreview({ src, waveform, recording }) {
 	}
 
 	return createElement("div", {
-		className: (() => { return ("vc-vmsg-preview" + (recording ? " vc-vmsg-preview-recording" : "")) })(),
+		className: (() => { return ("bd-vmsg-preview" + (recording ? " bd-vmsg-preview-recording" : "")) })(),
 		children: [
 			createElement("div", {
-				className: "vc-vmsg-preview-indicator",
+				className: "bd-vmsg-preview-indicator",
 			}),
 			createElement("div", {
-				className: "vc-vmsg-preview-time",
+				className: "bd-vmsg-preview-time",
 				children: durationDisplay
 			}),
 			createElement("div", {
-				className: "vc-vmsg-preview-label",
+				className: "bd-vmsg-preview-label",
 				children: (() => { return (recording ? "RECORDING" : "----") })()
 			})
 		]
 	});
 }
 
-function chooseFile(mimeTypes) {
-	return new Promise(resolve => {
-		const input = document.createElement("input");
-		input.type = "file";
-		input.style.display = "none";
-		input.accept = mimeTypes;
-		input.onchange = async () => {
-			resolve(input.files?.[0] ?? null);
-		};
-
-		document.body.appendChild(input);
-		input.click();
-		setImmediate(() => document.body.removeChild(input));
-	});
-}
-
-const MessageActions = Webpack.getByKeys("getSendMessageOptionsForReply");
-
 function Icon({ height = 24, width = 24, className, children, viewBox, ...svgProps }) {
 	return createElement("svg", {
-		className: `${className} vc-icon`,
+		className: `${className} bd-icon`,
 		role: "img",
 		width,
 		height,
@@ -297,7 +496,7 @@ function Icon({ height = 24, width = 24, className, children, viewBox, ...svgPro
 function Microphone(props) {
 	return createElement(Icon, {
 		...props,
-		className: `${props.className} vc-microphone`,
+		className: `${props.className} bd-microphone`,
 		viewBox: "0 0 24 24",
 		children: [
 			createElement("path", {
@@ -315,60 +514,9 @@ function Microphone(props) {
 		]
 	})
 }
+// #endregion 
 
-const dispatcher = Webpack.getByKeys("dispatch", "subscribe");
-const HTTP = Webpack.getAllByKeys("Z").filter(obj => obj.Z.post)[0].Z;
-
-async function sendAudio(blob, meta) {
-	if (!blob) return;
-	if (!meta) meta = EMPTY_META;
-
-	if (blob.size == 0) {
-		UI.showToast("Voice message data was empty. Aborted upload.", { type: "error" });
-		return;
-	}
-
-	const channelId = Webpack.getStore("SelectedChannelStore").getCurrentlySelectedChannelId();
-	const reply = Webpack.getStore("PendingReplyStore").getPendingReply(channelId);
-	if (reply) dispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
-
-	const upload = await new CloudUploader({
-		file: new File([blob], "voice-message.ogg", { type: "audio/ogg; codecs=opus" }),
-		isClip: false,
-		isThumbnail: false,
-		platform: 1,
-	}, channelId, false, 0);
-
-	upload.on("complete", () => {
-		HTTP.post({
-			url: `/channels/${channelId}/messages`,
-			body: {
-				flags: 1 << 13,
-				channel_id: channelId,
-				content: "",
-				nonce: Date.now(),
-				sticker_ids: [],
-				type: 0,
-				attachments: [{
-					id: "0",
-					filename: upload.filename,
-					uploaded_filename: upload.uploadedFilename,
-					waveform: meta.waveform,
-					duration_secs: meta.duration
-				}],
-				message_reference: reply ? MessageActions.getSendMessageOptionsForReply(reply)?.messageReference : null,
-			}
-		});
-	});
-	upload.on("error", () => UI.showToast("Failed to upload voice message", { type: "error" }));
-	//console.log(upload);
-	upload.upload();
-}
-
-const OptionClasses = Webpack.getByKeys("optionLabel");
-const PermissionStore = Webpack.getStore("PermissionStore");
-const PopoutMenuModule = Webpack.getAllByKeys("Z").filter(obj => obj.Z.toString().includes("Send Attachment"))[0];
-
+// #region Exports
 module.exports = class VoiceMessages {
 	constructor(meta) {
 		this.meta = meta;
@@ -385,157 +533,20 @@ module.exports = class VoiceMessages {
 
 	saveAndUpdate() { //Saves and updates settings and runs functions
 		Data.save(this.meta.name, "settings", settings);
-		BdApi.Patcher.unpatchAll(this.meta.name);	
+		Patcher.unpatchAll(this.meta.name);	
 		this.patchPopoutMenu();
 		if (settings.voiceDownload) this.patchVoiceMessage();
 	}
 
-	VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
-		const [isRecording, setRecording] = useState(false);
-		const [blob, setBlob] = useState();
-		const [blobUrl, setBlobUrl] = useObjectUrl();
-
-		useEffect(() => () => {
-			if (blobUrl)
-				URL.revokeObjectURL(blobUrl);
-		}, [blobUrl]);
-
-		const [meta] = useAwaiter(async () => {
-			if (!blob) return EMPTY_META;
-			if (shouldSkipMetadata) {
-				return EMPTY_META;
-			}
-			const audioContext = new AudioContext();
-			const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
-			const channelData = audioBuffer.getChannelData(0);
-
-			const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
-			// average the samples into much lower resolution bins, maximum of 256 total bins
-			const bins = new Uint8Array(clamp(Math.floor(audioBuffer.duration * 10), Math.min(32, channelData.length), 256));
-			const samplesPerBin = Math.floor(channelData.length / bins.length);
-
-			// Get root mean square of each bin
-			for (let binIdx = 0; binIdx < bins.length; binIdx++) {
-				let squares = 0;
-				for (let sampleOffset = 0; sampleOffset < samplesPerBin; sampleOffset++) {
-					const sampleIdx = binIdx * samplesPerBin + sampleOffset;
-					squares += channelData[sampleIdx] ** 2;
-				}
-				bins[binIdx] = ~~(Math.sqrt(squares / samplesPerBin) * 0xFF);
-			}
-
-			// Normalize bins with easing
-			const maxBin = Math.max(...bins);
-			const ratio = 1 + (0xFF / maxBin - 1) * Math.min(1, 100 * (maxBin / 0xFF) ** 3);
-			for (let i = 0; i < bins.length; i++) bins[i] = Math.min(0xFF, ~~(bins[i] * ratio));
-
-			return {
-				waveform: window.btoa(String.fromCharCode(...bins)),
-				duration: audioBuffer.duration,
-			};
-		}, {
-			deps: [blob],
-			fallbackValue: EMPTY_META,
-		});
-
-		const isUnsupportedFormat = blob && (
-			!blob.type.startsWith("audio/ogg")
-			|| blob.type.includes("codecs") && !blob.type.includes("opus")
-		);
-
-		return createElement(ReactUtils.ModalRoot, {
-			transitionState: ReactUtils.ModalTransitionState.ENTERING,
-			children: [
-				createElement(ReactUtils.ModalHeader, {
-					children: [
-						createElement(ReactUtils.FormTitle, {
-							children: "Record Voice Message"
-						})
-					]
-				}),
-				createElement(ReactUtils.ModalContent, {
-					className: "vc-vmsg-modal",
-					children: [
-						createElement("div", {
-							className: "vc-vmsg-buttons",
-							children: [
-								createElement(VoiceRecorder, {
-									setAudioBlob: (blob) => {
-										setBlob(blob);
-										setBlobUrl(blob);
-									},
-									onRecordingChange: setRecording
-								}),
-								createElement(ReactUtils.Button, {
-									onClick: async () => {
-										const file = await chooseFile("audio/*");
-										if (file) {
-											setBlob(file);
-											setBlobUrl(file);
-										}
-									},
-									children: "Upload File",
-									style: {
-										marginTop: "10px"
-									}
-								})
-							]
-						}),
-						createElement(ReactUtils.FormTitle, { children: "Preview" }),
-						createElement(VoicePreview, {
-							src: blobUrl,
-							waveform: meta?.waveform,
-							recording: isRecording
-						}),
-						(() => {
-							if (isUnsupportedFormat) {
-								return createElement(ReactUtils.Card, {
-									className: `vc-plugins-restart-card ${MarginClasses.marginTop20}`,
-									children: [
-										createElement(ReactUtils.FormText, {
-											children: `Voice Messages have to be OggOpus to be playable on iOS. This file is ${blob.type} so it will not be playable on iOS.`
-										}),
-										createElement(ReactUtils.FormText, {
-											className: MarginClasses.marginTop8,
-											children: [
-												`To fix it, first convert it to OggOpus, for example using the `,
-												createElement(ReactUtils.Anchor, {
-													href: "https://convertio.co/mp3-opus/",
-													children: "convertio web converter"
-												})
-											]
-										})
-									]
-								})
-							}
-						})()
-					]
-				}),
-				createElement(ReactUtils.ModalFooter, {
-					children: [
-						createElement(ReactUtils.Button, {
-							disabled: !blob,
-							onClick: async () => {
-								modalProps.onClose();
-								sendAudio(blob, meta);
-								UI.showToast("Now sending voice message... Please be patient", { type: "info" });
-							},
-							children: "Send"
-						})
-					]
-				})
-			]
-		})
-	}
-
-	patchPopoutMenu() {
+	patchPopoutMenu() { //Adds the "Send voice message" button to the popout menu
 		Patcher.after(this.meta.name, PopoutMenuModule, "Z", (_, [args], ret) => {
-			//											  SEND_VOICE_MESSAGES											 SEND_MESSAGES
+
+			//											  SEND_VOICE_MESSAGES								 SEND_MESSAGES
 			if (args.channel.guild_id && !(PermissionStore.can(1n << 46n, args.channel) && PermissionStore.can(1n << 11n, args.channel)))
 				return;
 
 			ret.props.children.push(ContextMenu.buildItem({
-				id: "vc-send-vmsg",
+				id: "bd-send-vmsg",
 				label: createElement("div", {
 					className: OptionClasses.optionLabel,
 					children: [
@@ -553,7 +564,7 @@ module.exports = class VoiceMessages {
 					]
 				}),
 				action: () => {
-					ReactUtils.openModal(modalProps => createElement(this.VoiceMessageModal, { modalProps, shouldSkipMetadata: settings.skipMetadata }), {
+					ReactUtils.openModal(modalProps => createElement(VoiceMessageModal, { modalProps, shouldSkipMetadata: settings.skipMetadata }), {
 						onCloseCallback: () => {
 							//ensure we stop recording if the user suddenly closes the modal without pressing stop
 							discordVoice.stopLocalAudioRecording(filePath => { return; })
@@ -564,10 +575,10 @@ module.exports = class VoiceMessages {
 		});
 	}
 
-	patchVoiceMessage() {
-		BdApi.Patcher.after(this.meta.name, VoiceMessage, "type", (_, [args], ret) => {
+	patchVoiceMessage() { // Adds voiceDownload button to VoiceMessage elements
+		Patcher.after(this.meta.name, VoiceMessage, "type", (_, [args], ret) => {
 			ret.props.children.push(React.createElement("a", {
-				className: "vc-voice-download",
+				className: "bd-voice-download",
 				href: args?.item?.downloadUrl != undefined ? args.item.downloadUrl : "#",
 				onClick: function (e) { e => e.stopPropagation() },
 				ariaLabel: "Download voice message",
@@ -589,23 +600,23 @@ module.exports = class VoiceMessages {
 
 	start() {
 		Patcher.unpatchAll(this.meta.name)
-		BdApi.DOM.addStyle(this.meta.name, `
-			.vc-vmsg-modal {
+		DOM.addStyle(this.meta.name, `
+			.bd-vmsg-modal {
 				padding: 1em;
 			}
 						
-			.vc-vmsg-buttons {
+			.bd-vmsg-buttons {
 				display: grid;
 				grid-template-columns: repeat(3, minmax(0, 1fr));
 				gap: 0.5em;
 				margin-bottom: 1em;
 			}
 						
-			.vc-vmsg-modal audio {
+			.bd-vmsg-modal audio {
 				width: 100%;
 			}
 						
-			.vc-vmsg-preview {
+			.bd-vmsg-preview {
 				color: var(--text-normal);
 				border-radius: 24px;
 				background-color: var(--background-secondary);
@@ -616,7 +627,7 @@ module.exports = class VoiceMessages {
 				height: 48px;
 			}
 			
-			.vc-vmsg-preview-indicator {
+			.bd-vmsg-preview-indicator {
 				background: var(--button-secondary-background);
 				width: 16px;
 				height: 16px;
@@ -624,11 +635,11 @@ module.exports = class VoiceMessages {
 				transition: background 0.2s ease-in-out;
 			}
 			
-			.vc-vmsg-preview-recording .vc-vmsg-preview-indicator {
+			.bd-vmsg-preview-recording .bd-vmsg-preview-indicator {
 				background: var(--status-danger);
 			}
 			
-			.vc-vmsg-preview-time {
+			.bd-vmsg-preview-time {
 				opacity: 0.8;
 				margin: 0 0.5em;
 				font-size: 80%;
@@ -637,7 +648,7 @@ module.exports = class VoiceMessages {
 				font-family: var(--font-code);
 			}
 			
-			.vc-vmsg-preview-label {
+			.bd-vmsg-preview-label {
 				opacity: 0.5;
 				letter-spacing: 0.125em;
 				font-weight: 600;
@@ -645,7 +656,7 @@ module.exports = class VoiceMessages {
 				text-align: center;
 			}
 
-			.vc-voice-download {
+			.bd-voice-download {
 				width: 24px;
 				height: 24px;
 				color: var(--interactive-normal);
@@ -654,7 +665,7 @@ module.exports = class VoiceMessages {
 				position: relative;
 			}
 
-			.vc-voice-download:hover {
+			.bd-voice-download:hover {
 				color: var(--interactive-active);
 			}
 		`);
@@ -666,9 +677,9 @@ module.exports = class VoiceMessages {
             Logger.warn(this.meta.name, err);
             Logger.info(this.meta.name, "Error parsing JSON. Resetting file to default...");
             //watch this shit yo
-            require("fs").rmSync(require("path").join(BdApi.Plugins.folder, `${this.meta.name}.config.json`));
-            BdApi.Plugins.reload(this.meta.name);
-            BdApi.Plugins.enable(this.meta.name);
+            require("fs").rmSync(require("path").join(Plugins.folder, `${this.meta.name}.config.json`));
+            Plugins.reload(this.meta.name);
+            Plugins.enable(this.meta.name);
             return;
         }
 
@@ -708,8 +719,9 @@ module.exports = class VoiceMessages {
 
 	stop() {
 		Patcher.unpatchAll(this.meta.name);
-		BdApi.DOM.removeStyle(this.meta.name);
+		DOM.removeStyle(this.meta.name);
 	}
 };
+// #endregion
 
 /*@end@*/
