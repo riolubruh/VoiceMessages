@@ -540,7 +540,6 @@ module.exports = class VoiceMessages {
 	}
 
 	saveAndUpdate() { //Saves and updates settings and runs functions
-		console.log(ReactUtils);
 		Data.save(this.meta.name, "settings", settings);
 		Patcher.unpatchAll(this.meta.name);	
 		this.patchPopoutMenu();
