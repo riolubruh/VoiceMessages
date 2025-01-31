@@ -2,7 +2,7 @@
  * @name VoiceMessages
  * @author Riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.0.9
+ * @version 0.1.0
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -57,20 +57,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.0.9",
+		"version": "0.1.0",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.0.9",
+			title: "0.1.0",
 			items: [
-				"Moved all constants to the top of the file since it was messy.",
-				"Reorganized code into constants, modules, global functions, and react elements sections.",
-				"Rename classes to replace \"vc-\" prefix with \"bd-\".",
-				"Fixed defaultSettings and settings being global.",
-				"Made the module filter for getting CloudUploader better."
+				"Fixed Send Voice Message modal not working after Discord update."
 			]
 		}
 	],
@@ -96,7 +92,19 @@ let settings = {};
 const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins } = BdApi;
 const { createElement, useState, useEffect, useMemo } = React;
 const MarginClasses = Webpack.getByKeys("marginTop20", "marginTop8");
-const ReactUtils = Webpack.getByKeys("openModalLazy");
+//const ReactUtils = Webpack.getBySource("modalKey:i,instant:a")
+const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, {
+    FormText: Webpack.Filters.byStrings(".SELECTABLE),", ".DISABLED:", ".DEFAULT;", ",selectable:", ",disabled:", ",className:"),
+    FormTitle: Webpack.Filters.byStrings('["defaultMargin".concat', 'faded'),
+    openModal: Webpack.Filters.byRegex(/onCloseRequest:null!=.{1,3}?.{1,3}/),
+    ModalRoot: Webpack.Filters.byStrings("fullscreenOnMobile", "scale(1)"),
+    ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
+    ModalFooter: Webpack.Filters.byStrings("footer", "footerSeparator"),
+    ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
+    Card: Webpack.Filters.byStrings("PRIMARY&&", ".outline:"),
+    Button: x=>x && typeof x === "function" && x.toString?.().includes('submittingFinishedLabel'),
+    Anchor: Webpack.Filters.byStrings("){let{href:", ",onClick:", ",rel:", "target:", "useDefaultUnderlineStyles")
+});
 const VoiceInfo = Webpack.getByKeys("getEchoCancellation");
 const CloudUploader = Webpack.getModule(Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), {searchExports:true});
 const fs = require("fs");
@@ -292,7 +300,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 	);
 
 	return createElement(ReactUtils.ModalRoot, {
-		transitionState: ReactUtils.ModalTransitionState.ENTERING,
+		transitionState: 1,
 		children: [
 			createElement(ReactUtils.ModalHeader, {
 				children: [
@@ -532,6 +540,7 @@ module.exports = class VoiceMessages {
 	}
 
 	saveAndUpdate() { //Saves and updates settings and runs functions
+		console.log(ReactUtils);
 		Data.save(this.meta.name, "settings", settings);
 		Patcher.unpatchAll(this.meta.name);	
 		this.patchPopoutMenu();
