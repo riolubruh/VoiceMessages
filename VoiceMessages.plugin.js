@@ -2,7 +2,7 @@
  * @name VoiceMessages
  * @author Riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.0
+ * @version 0.1.1
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -57,16 +57,17 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.0",
+		"version": "0.1.1",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.0",
+			title: "0.1.1",
 			items: [
-				"Fixed Send Voice Message modal not working after Discord update."
+				"Fixed voice messages not being sent.",
+				"Fixed a React crash when using a file that is not OggOpus."
 			]
 		}
 	],
@@ -103,7 +104,7 @@ const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, 
     ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
     Card: Webpack.Filters.byStrings("PRIMARY&&", ".outline:"),
     Button: x=>x && typeof x === "function" && x.toString?.().includes('submittingFinishedLabel'),
-    Anchor: Webpack.Filters.byStrings("){let{href:", ",onClick:", ",rel:", "target:", "useDefaultUnderlineStyles")
+    Anchor: Webpack.Filters.byStrings("useDefaultUnderlineStyles", "getDefaultLinkInterceptor")
 });
 const VoiceInfo = Webpack.getByKeys("getEchoCancellation");
 const CloudUploader = Webpack.getModule(Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), {searchExports:true});
@@ -112,12 +113,13 @@ const VoiceMessage = Webpack.getModules(Webpack.Filters.byKeys("Z")).filter(obj 
 const MessageActions = Webpack.getByKeys("getSendMessageOptionsForReply");
 const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
 const dispatcher = Webpack.getByKeys("dispatch", "subscribe");
-const HTTP = Webpack.getAllByKeys("Z").filter(obj => obj.Z.post)[0].Z;
+const HTTP = Webpack.getBySource(".post,", ',"post"').Z;
 const SelectedChannelStore = Webpack.getStore("SelectedChannelStore");
 const PendingReplyStore = Webpack.getStore("PendingReplyStore");
 const OptionClasses = Webpack.getByKeys("optionLabel");
 const PermissionStore = Webpack.getStore("PermissionStore");
 const PopoutMenuModule = Webpack.getAllByKeys("Z").filter(obj => obj.Z.toString().includes("Send Attachment"))[0];
+const SnowflakeUtils = Webpack.getByKeys("fromTimestamp", {searchExports:true});
 // #endregion
 
 // #region Global Functions
@@ -213,7 +215,6 @@ async function sendAudio(blob, meta) { //Sends the voice message
 
 	const upload = await new CloudUploader({
 		file: new File([blob], "voice-message.ogg", { type: "audio/ogg; codecs=opus" }),
-		isClip: false,
 		isThumbnail: false,
 		platform: 1,
 	}, channelId, false, 0);
@@ -225,7 +226,7 @@ async function sendAudio(blob, meta) { //Sends the voice message
 				flags: 1 << 13,
 				channel_id: channelId,
 				content: "",
-				nonce: Date.now(),
+				nonce: SnowflakeUtils.fromTimestamp(Date.now()),
 				sticker_ids: [],
 				type: 0,
 				attachments: [{
@@ -458,7 +459,7 @@ function VoicePreview({ src, waveform, recording }) {
 	});
 
 	const durationSeconds = recording ? Math.floor(durationMs / 1000) : 0;
-	const durationDisplay = Math.floor(durationSeconds / 60) + ":" + (durationSeconds % 60).toString().padStart(2, "0");
+	const durationDisplay = "" + (Math.floor(durationSeconds / 60) + ":" + (durationSeconds % 60).toString().padStart(2, "0"));
 
 	if (src && !recording) {
 		return createElement("div", {
