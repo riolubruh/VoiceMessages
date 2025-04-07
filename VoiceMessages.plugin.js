@@ -2,7 +2,7 @@
  * @name VoiceMessages
  * @author Riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.1
+ * @version 0.1.2
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -57,17 +57,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.1",
+		"version": "0.1.2",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.1",
+			title: "0.1.2",
 			items: [
-				"Fixed voice messages not being sent.",
-				"Fixed a React crash when using a file that is not OggOpus."
+				"Fixed a React crash when using a file that is not OggOpus again."
 			]
 		}
 	],
@@ -102,7 +101,6 @@ const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, 
     ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
     ModalFooter: Webpack.Filters.byStrings("footer", "footerSeparator"),
     ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
-    Card: Webpack.Filters.byStrings("PRIMARY&&", ".outline:"),
     Button: x=>x && typeof x === "function" && x.toString?.().includes('submittingFinishedLabel'),
     Anchor: Webpack.Filters.byStrings("useDefaultUnderlineStyles", "getDefaultLinkInterceptor")
 });
@@ -346,8 +344,12 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 					}),
 					(() => {
 						if (isUnsupportedFormat) {
-							return createElement(ReactUtils.Card, {
+							return createElement("div", {
 								className: `bd-plugins-restart-card ${MarginClasses.marginTop20}`,
+								style: {
+									border: "1px solid black",
+									padding: "1px 4px"
+								},
 								children: [
 									createElement(ReactUtils.FormText, {
 										children: `Voice Messages have to be OggOpus to be playable on iOS. This file is ${blob.type} so it will not be playable on iOS.`
