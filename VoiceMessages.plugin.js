@@ -1,6 +1,7 @@
 /**
  * @name VoiceMessages
  * @author Riolubruh
+ * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
  * @version 0.1.3
  * @invite EFmGEWAUns
@@ -92,7 +93,6 @@ let settings = {};
 const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins } = BdApi;
 const { createElement, useState, useEffect, useMemo } = React;
 const MarginClasses = Webpack.getByKeys("marginTop20", "marginTop8");
-//const ReactUtils = Webpack.getBySource("modalKey:i,instant:a")
 const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, {
     FormText: Webpack.Filters.byStrings(".SELECTABLE),", ".DISABLED:", ".DEFAULT;", ",selectable:", ",disabled:", ",className:"),
     FormTitle: Webpack.Filters.byStrings('["defaultMargin".concat', 'faded'),
