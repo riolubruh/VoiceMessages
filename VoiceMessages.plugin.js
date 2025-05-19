@@ -2,7 +2,7 @@
  * @name VoiceMessages
  * @author Riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.2
+ * @version 0.1.3
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -57,16 +57,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.2",
+		"version": "0.1.3",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.2",
+			title: "0.1.3",
 			items: [
-				"Fixed a React crash when using a file that is not OggOpus again."
+				"Fixed VoiceRecorder failing on Linux due to the code always replacing forward slashes with backslashes in the file path which only needs to be done on Windows. Thanks to graysmiley for bringing this issue to my attention."
 			]
 		}
 	],
@@ -107,6 +107,7 @@ const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, 
 const VoiceInfo = Webpack.getByKeys("getEchoCancellation");
 const CloudUploader = Webpack.getModule(Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), {searchExports:true});
 const fs = require("fs");
+const path = require("path");
 const VoiceMessage = Webpack.getModules(Webpack.Filters.byKeys("Z")).filter(obj => obj.Z.type).filter(obj => obj.Z.type.toString().includes("waveform:"))[0].Z;
 const MessageActions = Webpack.getByKeys("getSendMessageOptionsForReply");
 const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
@@ -397,8 +398,7 @@ function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 
 	function readRecording(filePath) {
 		try {
-			filePath = filePath.replaceAll("/", "\\");
-			filePath = filePath.replaceAll(`\\`, `\\\\`);
+			filePath = path.normalize(filePath);
 			const buf = fs.readFileSync(filePath, "", function (err) {
 				Logger.error(config.info.name, err);
 			});
