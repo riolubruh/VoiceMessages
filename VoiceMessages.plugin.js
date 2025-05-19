@@ -397,8 +397,10 @@ function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 
 	function readRecording(filePath) {
 		try {
-			filePath = filePath.replaceAll("/", "\\");
-			filePath = filePath.replaceAll(`\\`, `\\\\`);
+			if (navigator.platform.indexOf('Win') > -1) {
+				filePath = filePath.replaceAll("/", "\\");
+				filePath = filePath.replaceAll(`\\`, `\\\\`);
+			}
 			const buf = fs.readFileSync(filePath, "", function (err) {
 				Logger.error(config.info.name, err);
 			});
