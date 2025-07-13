@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.3
+ * @version 0.1.4
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,17 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.3",
+		"version": "0.1.4",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.3",
+			title: "0.1.4",
 			items: [
-				"Fixed VoiceRecorder failing on Linux due to the code always replacing forward slashes with backslashes in the file path which only needs to be done on Windows. Thanks to graysmiley for bringing this issue to my attention."
+				"Fixed React crash when opening the Send Voice Message modal.",
+				"Updated style for VoicePreview to make it look correct."
 			]
 		}
 	],
@@ -90,7 +91,7 @@ const EMPTY_META = {
 let settings = {};
 
 // #region Modules
-const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins } = BdApi;
+const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins, Components } = BdApi;
 const { createElement, useState, useEffect, useMemo } = React;
 const MarginClasses = Webpack.getByKeys("marginTop20", "marginTop8");
 const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, {
@@ -101,7 +102,6 @@ const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, 
     ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
     ModalFooter: Webpack.Filters.byStrings("footer", "footerSeparator"),
     ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
-    Button: x=>x && typeof x === "function" && x.toString?.().includes('submittingFinishedLabel'),
     Anchor: Webpack.Filters.byStrings("useDefaultUnderlineStyles", "getDefaultLinkInterceptor")
 });
 const VoiceInfo = Webpack.getByKeys("getEchoCancellation");
@@ -322,7 +322,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 								},
 								onRecordingChange: setRecording
 							}),
-							createElement(ReactUtils.Button, {
+							createElement(Components.Button, {
 								onClick: async () => {
 									const file = await chooseFile("audio/*");
 									if (file) {
@@ -373,7 +373,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 			}),
 			createElement(ReactUtils.ModalFooter, {
 				children: [
-					createElement(ReactUtils.Button, {
+					createElement(Components.Button, {
 						disabled: !blob,
 						onClick: async () => {
 							modalProps.onClose();
@@ -441,7 +441,7 @@ function VoiceRecorder({ setAudioBlob, onRecordingChange }) {
 		}
 	}
 
-	return createElement(ReactUtils.Button, {
+	return createElement(Components.Button, {
 		id: "toggleRecordingButton",
 		onClick: () => {
 			toggleRecording();
@@ -628,9 +628,9 @@ module.exports = class VoiceMessages {
 			}
 						
 			.bd-vmsg-preview {
-				color: var(--text-normal);
+				color: var(--text-default);
 				border-radius: 24px;
-				background-color: var(--background-secondary);
+				background-color: var(--background-base-lower);
 				position: relative;
 				display: flex;
 				align-items: center;
