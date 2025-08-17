@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.4
+ * @version 0.1.5
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,17 +58,19 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.4",
+		"version": "0.1.5",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.4",
+			title: "0.1.5",
 			items: [
-				"Fixed React crash when opening the Send Voice Message modal.",
-				"Updated style for VoicePreview to make it look correct."
+				"Fixed React error when attempting to upload a non-OggOpus file.",
+				"Replaced some uses of internal modules that were unnecessary.",
+				"Switched to using getBulk to fetch modules on startup.",
+				"Removed hardcoded function names."
 			]
 		}
 	],
@@ -93,32 +95,43 @@ let settings = {};
 // #region Modules
 const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins, Components } = BdApi;
 const { createElement, useState, useEffect, useMemo } = React;
-const MarginClasses = Webpack.getByKeys("marginTop20", "marginTop8");
 const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, {
-    FormText: Webpack.Filters.byStrings(".SELECTABLE),", ".DISABLED:", ".DEFAULT;", ",selectable:", ",disabled:", ",className:"),
     FormTitle: Webpack.Filters.byStrings('["defaultMargin".concat', 'faded'),
-    openModal: Webpack.Filters.byRegex(/onCloseRequest:null!=.{1,3}?.{1,3}/),
+    openModal: Webpack.Filters.byStrings('onCloseRequest:null!='),
     ModalRoot: Webpack.Filters.byStrings("fullscreenOnMobile", "scale(1)"),
     ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
     ModalFooter: Webpack.Filters.byStrings("footer", "footerSeparator"),
     ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
     Anchor: Webpack.Filters.byStrings("useDefaultUnderlineStyles", "getDefaultLinkInterceptor")
 });
-const VoiceInfo = Webpack.getByKeys("getEchoCancellation");
-const CloudUploader = Webpack.getModule(Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), {searchExports:true});
+const [
+	VoiceInfo,
+	CloudUploader,
+	VoiceMessage,
+	MessageActions,
+	Dispatcher,
+	HTTP,
+	SelectedChannelStore,
+	PendingReplyStore,
+	PermissionStore,
+	PopoutMenuModule,
+	SnowflakeUtils
+] = Webpack.getBulk(
+    {filter: Webpack.Filters.byKeys('getEchoCancellation')},
+	{filter: Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), searchExports:true},
+	{filter: Webpack.Filters.bySource('waveform:'), searchExports:true},
+	{filter: Webpack.Filters.byKeys('getSendMessageOptionsForReply')},
+	{filter: Webpack.Filters.byKeys("dispatch", "subscribe")},
+	{filter: Webpack.Filters.bySource(".post,", ',"post"'), defaultExport:true, searchExports:true},
+	{filter: Webpack.Filters.byStoreName('SelectedChannelStore')},
+	{filter: Webpack.Filters.byStoreName('PendingReplyStore')},
+	{filter: Webpack.Filters.byStoreName('PermissionStore')},
+	{filter: Webpack.Filters.byStrings("Send Attachment"), defaultExport:false},
+	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true}
+)
+const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
 const fs = require("fs");
 const path = require("path");
-const VoiceMessage = Webpack.getModules(Webpack.Filters.byKeys("Z")).filter(obj => obj.Z.type).filter(obj => obj.Z.type.toString().includes("waveform:"))[0].Z;
-const MessageActions = Webpack.getByKeys("getSendMessageOptionsForReply");
-const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
-const dispatcher = Webpack.getByKeys("dispatch", "subscribe");
-const HTTP = Webpack.getBySource(".post,", ',"post"').Z;
-const SelectedChannelStore = Webpack.getStore("SelectedChannelStore");
-const PendingReplyStore = Webpack.getStore("PendingReplyStore");
-const OptionClasses = Webpack.getByKeys("optionLabel");
-const PermissionStore = Webpack.getStore("PermissionStore");
-const PopoutMenuModule = Webpack.getAllByKeys("Z").filter(obj => obj.Z.toString().includes("Send Attachment"))[0];
-const SnowflakeUtils = Webpack.getByKeys("fromTimestamp", {searchExports:true});
 // #endregion
 
 // #region Global Functions
@@ -210,7 +223,7 @@ async function sendAudio(blob, meta) { //Sends the voice message
 
 	const channelId = SelectedChannelStore.getCurrentlySelectedChannelId();
 	const reply = PendingReplyStore.getPendingReply(channelId);
-	if (reply) dispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
+	if (reply) Dispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
 
 	const upload = await new CloudUploader({
 		file: new File([blob], "voice-message.ogg", { type: "audio/ogg; codecs=opus" }),
@@ -346,17 +359,20 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 					(() => {
 						if (isUnsupportedFormat) {
 							return createElement("div", {
-								className: `bd-plugins-restart-card ${MarginClasses.marginTop20}`,
+								className: `bd-plugins-restart-card`,
 								style: {
 									border: "1px solid black",
-									padding: "1px 4px"
+									padding: "1px 4px",
+									marginTop: "20px"
 								},
 								children: [
-									createElement(ReactUtils.FormText, {
+									createElement(Components.Text, {
 										children: `Voice Messages have to be OggOpus to be playable on iOS. This file is ${blob.type} so it will not be playable on iOS.`
 									}),
-									createElement(ReactUtils.FormText, {
-										className: MarginClasses.marginTop8,
+									createElement(Components.Text, {
+										style: {
+											marginTop: "8px"
+										},
 										children: [
 											`To fix it, first convert it to OggOpus, for example using the `,
 											createElement(ReactUtils.Anchor, {
@@ -550,7 +566,10 @@ module.exports = class VoiceMessages {
 	}
 
 	patchPopoutMenu() { //Adds the "Send voice message" button to the popout menu
-		Patcher.after(this.meta.name, PopoutMenuModule, "Z", (_, [args], ret) => {
+
+		let name = Object.keys(PopoutMenuModule)[0];
+
+		Patcher.after(this.meta.name, PopoutMenuModule, name, (_, [args], ret) => {
 
 			//											  SEND_VOICE_MESSAGES								 SEND_MESSAGES
 			if (args.channel.guild_id && !(PermissionStore.can(1n << 46n, args.channel) && PermissionStore.can(1n << 11n, args.channel)))
@@ -559,18 +578,24 @@ module.exports = class VoiceMessages {
 			ret.props.children.push(ContextMenu.buildItem({
 				id: "bd-send-vmsg",
 				label: createElement("div", {
-					className: OptionClasses.optionLabel,
+					style: {
+						display: "flex",
+						alignItems: "center",
+						verticalAlign: "middle"
+					},
 					children: [
 						//microphone icon
 						createElement(Microphone, {
-							className: OptionClasses.optionIcon,
 							height: 24,
 							width: 24
 						}),
 						//option name
 						createElement("div", {
-							className: OptionClasses.optionName,
-							children: "Send voice message"
+							children: "Send Voice Message",
+							style: {
+								marginLeft: "8px",
+								fontSize: "14px",
+							}
 						})
 					]
 				}),
