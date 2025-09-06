@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.5
+ * @version 0.1.6
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,19 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.5",
+		"version": "0.1.6",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.5",
+			title: "0.1.6",
 			items: [
-				"Fixed React error when attempting to upload a non-OggOpus file.",
-				"Replaced some uses of internal modules that were unnecessary.",
-				"Switched to using getBulk to fetch modules on startup.",
-				"Removed hardcoded function names."
+				"Fixed plugin not working on BetterDiscord Canary." //thx arven and doggybootsy
 			]
 		}
 	],
@@ -119,10 +116,10 @@ const [
 ] = Webpack.getBulk(
     {filter: Webpack.Filters.byKeys('getEchoCancellation')},
 	{filter: Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), searchExports:true},
-	{filter: Webpack.Filters.bySource('waveform:'), searchExports:true},
+	{filter: m => m.type?.toString?.().includes("waveform:"), searchExports:true},
 	{filter: Webpack.Filters.byKeys('getSendMessageOptionsForReply')},
 	{filter: Webpack.Filters.byKeys("dispatch", "subscribe")},
-	{filter: Webpack.Filters.bySource(".post,", ',"post"'), defaultExport:true, searchExports:true},
+	{filter: m => typeof m === "object" && "delete" in m && "patch" in m, searchExports:false},
 	{filter: Webpack.Filters.byStoreName('SelectedChannelStore')},
 	{filter: Webpack.Filters.byStoreName('PendingReplyStore')},
 	{filter: Webpack.Filters.byStoreName('PermissionStore')},
