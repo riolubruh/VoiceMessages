@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.6
+ * @version 0.1.7
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.6",
+		"version": "0.1.7",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.6",
+			title: "0.1.7",
 			items: [
-				"Fixed plugin not working on BetterDiscord Canary." //thx arven and doggybootsy
+				"Fixed another React error caused by a Discord update." // JFC .. just ended up replacing uses of Discord's FormTitle to make life a little easier.
 			]
 		}
 	],
@@ -93,7 +93,6 @@ let settings = {};
 const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins, Components } = BdApi;
 const { createElement, useState, useEffect, useMemo } = React;
 const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, {
-    FormTitle: Webpack.Filters.byStrings('["defaultMargin".concat', 'faded'),
     openModal: Webpack.Filters.byStrings('onCloseRequest:null!='),
     ModalRoot: Webpack.Filters.byStrings("fullscreenOnMobile", "scale(1)"),
     ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
@@ -314,9 +313,17 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 		children: [
 			createElement(ReactUtils.ModalHeader, {
 				children: [
-					createElement(ReactUtils.FormTitle, {
+					createElement("h1", { 
+						style: {
+							margin: "8px 0px",
+							fontSize: "16px",
+							fontWeight: "500",
+							marginBlockStart: "4px",
+							marginBlockEnd: "0px",
+							color: "var(--text-primary)"
+						},
 						children: "Record Voice Message"
-					})
+					}),
 				]
 			}),
 			createElement(ReactUtils.ModalContent, {
@@ -347,7 +354,15 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 							})
 						]
 					}),
-					createElement(ReactUtils.FormTitle, { children: "Preview" }),
+					createElement("h2", { 
+						style: {
+							margin: "10px 10px 10px 0px",
+							marginLeft: "0px",
+							fontSize: "16px",
+							color: "var(--text-primary)"
+						},
+						children: "Preview"
+					}),
 					createElement(VoicePreview, {
 						src: blobUrl,
 						waveform: meta?.waveform,
@@ -632,7 +647,19 @@ module.exports = class VoiceMessages {
 
 
 	start() {
-		Patcher.unpatchAll(this.meta.name)
+		Patcher.unpatchAll(this.meta.name);
+		console.log(VoiceInfo);
+		console.log(CloudUploader);
+		console.log(VoiceMessage);
+		console.log(MessageActions);
+		console.log(Dispatcher);
+		console.log(HTTP);
+		console.log(SelectedChannelStore);
+		console.log(PendingReplyStore);
+		console.log(PermissionStore);
+		console.log(PopoutMenuModule);
+		console.log(SnowflakeUtils);
+		console.log(ReactUtils);
 		DOM.addStyle(this.meta.name, `
 			.bd-vmsg-modal {
 				padding: 1em;
