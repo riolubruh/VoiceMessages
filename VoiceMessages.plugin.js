@@ -648,18 +648,6 @@ module.exports = class VoiceMessages {
 
 	start() {
 		Patcher.unpatchAll(this.meta.name);
-		console.log(VoiceInfo);
-		console.log(CloudUploader);
-		console.log(VoiceMessage);
-		console.log(MessageActions);
-		console.log(Dispatcher);
-		console.log(HTTP);
-		console.log(SelectedChannelStore);
-		console.log(PendingReplyStore);
-		console.log(PermissionStore);
-		console.log(PopoutMenuModule);
-		console.log(SnowflakeUtils);
-		console.log(ReactUtils);
 		DOM.addStyle(this.meta.name, `
 			.bd-vmsg-modal {
 				padding: 1em;
