@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.7
+ * @version 0.1.8
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.7",
+		"version": "0.1.8",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.7",
+			title: "0.1.8",
 			items: [
-				"Fixed another React error caused by a Discord update." // JFC .. just ended up replacing uses of Discord's FormTitle to make life a little easier.
+				"Voice download button now works on the voice preview."
 			]
 		}
 	],
@@ -625,9 +625,13 @@ module.exports = class VoiceMessages {
 
 	patchVoiceMessage() { // Adds voiceDownload button to VoiceMessage elements
 		Patcher.after(this.meta.name, VoiceMessage, "type", (_, [args], ret) => {
+			let href = "#";
+			if(args?.item?.downloadUrl != undefined) href = args.item.downloadUrl;
+			else if(args?.src != undefined) href = args.src;
+
 			ret.props.children.push(React.createElement("a", {
 				className: "bd-voice-download",
-				href: args?.item?.downloadUrl != undefined ? args.item.downloadUrl : "#",
+				href,
 				onClick: function (e) { e => e.stopPropagation() },
 				ariaLabel: "Download voice message",
 				target: "_blank",
