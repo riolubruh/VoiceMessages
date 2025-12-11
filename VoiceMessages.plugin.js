@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.8
+ * @version 0.1.9
  * @invite EFmGEWAUns
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,18 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.8",
+		"version": "0.1.9",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.8",
+			title: "0.1.9",
 			items: [
-				"Voice download button now works on the voice preview."
+				"Fix modal not working after Discord update.",
+				"Fix broken CSS after Discord update.",
+				"Slight optimization for BD 1.13."
 			]
 		}
 	],
@@ -92,14 +94,13 @@ let settings = {};
 // #region Modules
 const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins, Components } = BdApi;
 const { createElement, useState, useEffect, useMemo } = React;
-const ReactUtils = Webpack.getMangled(/ConfirmModal:\(\)=>.{1,3}.ConfirmModal/, {
-    openModal: Webpack.Filters.byStrings('onCloseRequest:null!='),
-    ModalRoot: Webpack.Filters.byStrings("fullscreenOnMobile", "scale(1)"),
-    ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
-    ModalFooter: Webpack.Filters.byStrings("footer", "footerSeparator"),
-    ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
-    Anchor: Webpack.Filters.byStrings("useDefaultUnderlineStyles", "getDefaultLinkInterceptor")
-});
+
+const {
+	SelectedChannelStore,
+	PendingReplyStore,
+	PermissionStore
+} = Webpack.Stores;
+
 const [
 	VoiceInfo,
 	CloudUploader,
@@ -107,11 +108,11 @@ const [
 	MessageActions,
 	Dispatcher,
 	HTTP,
-	SelectedChannelStore,
-	PendingReplyStore,
-	PermissionStore,
 	PopoutMenuModule,
-	SnowflakeUtils
+	SnowflakeUtils,
+	ModalUtils,
+	ModalElements,
+	Anchor
 ] = Webpack.getBulk(
     {filter: Webpack.Filters.byKeys('getEchoCancellation')},
 	{filter: Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), searchExports:true},
@@ -119,11 +120,16 @@ const [
 	{filter: Webpack.Filters.byKeys('getSendMessageOptionsForReply')},
 	{filter: Webpack.Filters.byKeys("dispatch", "subscribe")},
 	{filter: m => typeof m === "object" && "delete" in m && "patch" in m, searchExports:false},
-	{filter: Webpack.Filters.byStoreName('SelectedChannelStore')},
-	{filter: Webpack.Filters.byStoreName('PendingReplyStore')},
-	{filter: Webpack.Filters.byStoreName('PermissionStore')},
 	{filter: Webpack.Filters.byStrings("Send Attachment"), defaultExport:false},
-	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true}
+	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true},
+	{filter: Webpack.Filters.byKeys('openModal')},
+	{filter: Webpack.Filters.bySource("Wrap.NO_WRAP,className:", ";let{headerId:"), map: {
+		ModalRoot: Webpack.Filters.byStrings("fullscreenOnMobile", "scale(1)"),
+		ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
+		ModalFooter: Webpack.Filters.byStrings("footer", "footerSeparator"),
+		ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
+	}},
+	{filter: Webpack.Filters.byStrings('useDefaultUnderlineStyles', 'getDefaultLinkInterceptor'), searchExports:true}
 )
 const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
 const fs = require("fs");
@@ -308,10 +314,10 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 		|| blob.type.includes("codecs") && !blob.type.includes("opus")
 	);
 
-	return createElement(ReactUtils.ModalRoot, {
+	return createElement(ModalElements.ModalRoot, {
 		transitionState: 1,
 		children: [
-			createElement(ReactUtils.ModalHeader, {
+			createElement(ModalElements.ModalHeader, {
 				children: [
 					createElement("h1", { 
 						style: {
@@ -320,13 +326,13 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 							fontWeight: "500",
 							marginBlockStart: "4px",
 							marginBlockEnd: "0px",
-							color: "var(--text-primary)"
+							color: "var(--header-primary)"
 						},
 						children: "Record Voice Message"
 					}),
 				]
 			}),
-			createElement(ReactUtils.ModalContent, {
+			createElement(ModalElements.ModalContent, {
 				className: "bd-vmsg-modal",
 				children: [
 					createElement("div", {
@@ -359,7 +365,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 							margin: "10px 10px 10px 0px",
 							marginLeft: "0px",
 							fontSize: "16px",
-							color: "var(--text-primary)"
+							color: "var(--header-primary)"
 						},
 						children: "Preview"
 					}),
@@ -387,7 +393,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 										},
 										children: [
 											`To fix it, first convert it to OggOpus, for example using the `,
-											createElement(ReactUtils.Anchor, {
+											createElement(Anchor, {
 												href: "https://convertio.co/mp3-opus/",
 												children: "convertio web converter"
 											})
@@ -399,7 +405,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 					})()
 				]
 			}),
-			createElement(ReactUtils.ModalFooter, {
+			createElement(ModalElements.ModalFooter, {
 				children: [
 					createElement(Components.Button, {
 						disabled: !blob,
@@ -612,7 +618,7 @@ module.exports = class VoiceMessages {
 					]
 				}),
 				action: () => {
-					ReactUtils.openModal(modalProps => createElement(VoiceMessageModal, { modalProps, shouldSkipMetadata: settings.skipMetadata }), {
+					ModalUtils.openModal(modalProps => createElement(VoiceMessageModal, { modalProps, shouldSkipMetadata: settings.skipMetadata }), {
 						onCloseCallback: () => {
 							//ensure we stop recording if the user suddenly closes the modal without pressing stop
 							discordVoice.stopLocalAudioRecording(filePath => { return; })
@@ -711,16 +717,16 @@ module.exports = class VoiceMessages {
 			.bd-voice-download {
 				width: 24px;
 				height: 24px;
-				color: var(--interactive-normal);
-				margin-left: 12px;
+				color: var(--interactive-text-default);
 				cursor: pointer;
 				position: relative;
 			}
 
 			.bd-voice-download:hover {
-				color: var(--interactive-active);
+				color: var(--interactive-text-active);
 			}
 		`);
+
 		try{
             //load settings from config
             settings = Object.assign({}, defaultSettings, Data.load(this.meta.name, "settings"));
