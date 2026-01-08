@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.9
+ * @version 0.1.10
  * @invite HfFxUbgsBc
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -781,6 +781,4 @@ module.exports = class VoiceMessages {
 	}
 };
 // #endregion
-
-
 /*@end@*/
