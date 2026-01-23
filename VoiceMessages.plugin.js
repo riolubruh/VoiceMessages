@@ -655,21 +655,6 @@ module.exports = class VoiceMessages {
 
 
 	start() {
-		console.log("SelectedChannelStore", SelectedChannelStore);
-		console.log("PendingReplyStore", PendingReplyStore);
-		console.log("PermissionStore", PermissionStore);
-
-		console.log("VoiceInfo", VoiceInfo);
-		console.log("CloudUploader", CloudUploader);
-		console.log("VoiceMessage", VoiceMessage);
-		console.log("MessageActions", MessageActions);
-		console.log("Dispatcher", Dispatcher);
-		console.log("HTTP",HTTP);
-		console.log("PopoutMenuModule", PopoutMenuModule);
-		console.log("SnowflakeUtils", SnowflakeUtils);
-		console.log("ModalUtils", ModalUtils);
-		console.log("ModalElements", ModalElements);
-		console.log("Anchor", Anchor);
 		Patcher.unpatchAll(this.meta.name);
 		DOM.addStyle(this.meta.name, `
 			.bd-vmsg-modal {
@@ -795,3 +780,4 @@ module.exports = class VoiceMessages {
 };
 // #endregion
 /*@end@*/
+
