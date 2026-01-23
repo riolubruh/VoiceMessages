@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.10
+ * @version 0.1.11
  * @invite HfFxUbgsBc
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,18 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.9",
+		"version": "0.1.11",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.9",
+			title: "0.1.11",
 			items: [
-				"Fix modal not working after Discord update.",
-				"Fix broken CSS after Discord update.",
-				"Slight optimization for BD 1.13."
+				"Fix plugin not working after funny Discord update."
 			]
 		}
 	],
@@ -118,7 +116,7 @@ const [
 	{filter: Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), searchExports:true},
 	{filter: m => m.type?.toString?.().includes("waveform:"), searchExports:true},
 	{filter: Webpack.Filters.byKeys('getSendMessageOptionsForReply')},
-	{filter: Webpack.Filters.byKeys("dispatch", "subscribe")},
+	{filter: Webpack.Filters.byKeys("dispatch", "subscribe"), searchExports:true},
 	{filter: m => typeof m === "object" && "delete" in m && "patch" in m, searchExports:false},
 	{filter: Webpack.Filters.byStrings("Send Attachment"), defaultExport:false},
 	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true},
@@ -126,7 +124,7 @@ const [
 	{filter: Webpack.Filters.bySource("Wrap.NO_WRAP,className:", ";let{headerId:"), map: {
 		ModalRoot: Webpack.Filters.byStrings("fullscreenOnMobile", "scale(1)"),
 		ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
-		ModalFooter: Webpack.Filters.byStrings("footer", "footerSeparator"),
+		ModalFooter: Webpack.Filters.byStrings("grow:0"),
 		ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
 	}},
 	{filter: Webpack.Filters.byStrings('useDefaultUnderlineStyles', 'getDefaultLinkInterceptor'), searchExports:true}
@@ -657,6 +655,21 @@ module.exports = class VoiceMessages {
 
 
 	start() {
+		console.log("SelectedChannelStore", SelectedChannelStore);
+		console.log("PendingReplyStore", PendingReplyStore);
+		console.log("PermissionStore", PermissionStore);
+
+		console.log("VoiceInfo", VoiceInfo);
+		console.log("CloudUploader", CloudUploader);
+		console.log("VoiceMessage", VoiceMessage);
+		console.log("MessageActions", MessageActions);
+		console.log("Dispatcher", Dispatcher);
+		console.log("HTTP",HTTP);
+		console.log("PopoutMenuModule", PopoutMenuModule);
+		console.log("SnowflakeUtils", SnowflakeUtils);
+		console.log("ModalUtils", ModalUtils);
+		console.log("ModalElements", ModalElements);
+		console.log("Anchor", Anchor);
 		Patcher.unpatchAll(this.meta.name);
 		DOM.addStyle(this.meta.name, `
 			.bd-vmsg-modal {
