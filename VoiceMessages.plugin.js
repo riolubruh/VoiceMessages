@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.11
+ * @version 0.1.12
  * @invite HfFxUbgsBc
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.11",
+		"version": "0.1.12",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.11",
+			title: "0.1.12",
 			items: [
-				"Fix plugin not working after funny Discord update."
+				"Fix modal causing a React crash on Discord Canary."
 			]
 		}
 	],
@@ -121,9 +121,9 @@ const [
 	{filter: Webpack.Filters.byStrings("Send Attachment"), defaultExport:false},
 	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true},
 	{filter: Webpack.Filters.byKeys('openModal')},
-	{filter: Webpack.Filters.bySource("Wrap.NO_WRAP,className:", ";let{headerId:"), map: {
+	{filter: Webpack.Filters.bySource("Wrap.NO_WRAP,className:", "let{headerId:"), map: {
 		ModalRoot: Webpack.Filters.byStrings("fullscreenOnMobile", "scale(1)"),
-		ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", ";let{headerId:"),
+		ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", "let{headerId:"),
 		ModalFooter: Webpack.Filters.byStrings("grow:0"),
 		ModalContent: Webpack.Filters.byStrings(",scrollbarType:"),
 	}},
@@ -616,10 +616,10 @@ module.exports = class VoiceMessages {
 					]
 				}),
 				action: () => {
-					ModalUtils.openModal(modalProps => createElement(VoiceMessageModal, { modalProps, shouldSkipMetadata: settings.skipMetadata }), {
+					ModalUtils.openModal(modalProps => createElement(VoiceMessageModal,{modalProps,shouldSkipMetadata: settings.skipMetadata}),{
 						onCloseCallback: () => {
 							//ensure we stop recording if the user suddenly closes the modal without pressing stop
-							discordVoice.stopLocalAudioRecording(filePath => { return; })
+							discordVoice.stopLocalAudioRecording(filePath => {return;})
 						}
 					});
 				}
