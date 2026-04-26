@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.12
+ * @version 0.1.13
  * @invite HfFxUbgsBc
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,19 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.12",
+		"version": "0.1.13",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.12",
+			title: "0.1.13",
 			items: [
-				"Fix modal causing a React crash on Discord Canary."
+				"Fix plugin not working after recent Discord update.",
+				"Fix incorrect colors in modal and popout menu.",
+				"Stop using this.meta.name so much.",
+				"Adjust size of microphone icon in popout menu to be more in line with the existing ones."
 			]
 		}
 	],
@@ -90,7 +93,7 @@ const EMPTY_META = {
 let settings = {};
 
 // #region Modules
-const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins, Components } = BdApi;
+const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins, Components, ReactUtils } = new BdApi("VoiceMessages");
 const { createElement, useState, useEffect, useMemo } = React;
 
 const {
@@ -114,11 +117,15 @@ const [
 ] = Webpack.getBulk(
     {filter: Webpack.Filters.byKeys('getEchoCancellation')},
 	{filter: Webpack.Filters.byPrototypeKeys("uploadFileToCloud"), searchExports:true},
-	{filter: m => m.type?.toString?.().includes("waveform:"), searchExports:true},
+	{filter: Webpack.Filters.bySource('onVolumeHide','VOICE_MESSAGE'), map: {
+		type: x=>x.toString().includes("onVolumeChange") && !x.toString().includes("renderLinkComponent")
+	}},
 	{filter: Webpack.Filters.byKeys('getSendMessageOptionsForReply')},
 	{filter: Webpack.Filters.byKeys("dispatch", "subscribe"), searchExports:true},
 	{filter: m => typeof m === "object" && "delete" in m && "patch" in m, searchExports:false},
-	{filter: Webpack.Filters.byStrings("Send Attachment"), defaultExport:false},
+	{filter: Webpack.Filters.bySource("Send Attachment"), searchExports:true, defaultExport:true, map: {
+		ChannelAttach: x=>x.type
+	}},
 	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true},
 	{filter: Webpack.Filters.byKeys('openModal')},
 	{filter: Webpack.Filters.bySource("Wrap.NO_WRAP,className:", "let{headerId:"), map: {
@@ -132,6 +139,7 @@ const [
 const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
 const fs = require("fs");
 const path = require("path");
+const nodePatcher = ReactUtils.createNodePatcher();
 // #endregion
 
 // #region Global Functions
@@ -324,7 +332,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 							fontWeight: "500",
 							marginBlockStart: "4px",
 							marginBlockEnd: "0px",
-							color: "var(--header-primary)"
+							color: "var(--control-primary-text-default)"
 						},
 						children: "Record Voice Message"
 					}),
@@ -363,7 +371,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 							margin: "10px 10px 10px 0px",
 							marginLeft: "0px",
 							fontSize: "16px",
-							color: "var(--header-primary)"
+							color: "var(--control-primary-text-default)"
 						},
 						children: "Preview"
 					}),
@@ -497,7 +505,7 @@ function VoicePreview({ src, waveform, recording }) {
 
 	if (src && !recording) {
 		return createElement("div", {
-			children: createElement(VoiceMessage, {
+			children: createElement(VoiceMessage.type, {
 				key: src,
 				"src": src,
 				"waveform": waveform,
@@ -539,7 +547,7 @@ function Icon({ height = 24, width = 24, className, children, viewBox, ...svgPro
 function Microphone(props) {
 	return createElement(Icon, {
 		...props,
-		className: `${props.className} bd-microphone`,
+		className: `bd-microphone`,
 		viewBox: "0 0 24 24",
 		children: [
 			createElement("path", {
@@ -575,87 +583,99 @@ module.exports = class VoiceMessages {
 	}
 
 	saveAndUpdate() { //Saves and updates settings and runs functions
-		Data.save(this.meta.name, "settings", settings);
-		Patcher.unpatchAll(this.meta.name);	
+		Data.save("settings", settings);
+		Patcher.unpatchAll();	
 		this.patchPopoutMenu();
 		if (settings.voiceDownload) this.patchVoiceMessage();
 	}
 
 	patchPopoutMenu() { //Adds the "Send voice message" button to the popout menu
+		Patcher.after(PopoutMenuModule?.ChannelAttach, "type", (_, [args], ret) => {
+			const child = ret?.props?.children?.[1]?.props?.children;
 
-		let name = Object.keys(PopoutMenuModule)[0];
+			if (!child) return;
 
-		Patcher.after(this.meta.name, PopoutMenuModule, name, (_, [args], ret) => {
+			ret.props.children[1].props.children = React.cloneElement(child, {
+				renderPopout(...args) {
+					const ret = child.props.renderPopout.apply(this, args);
+					
+					nodePatcher.patch(ret, (props,res) => {
+						//											  SEND_VOICE_MESSAGES								 SEND_MESSAGES
+						if (props.channel.guild_id && !(PermissionStore.can(1n << 46n, props.channel) && PermissionStore.can(1n << 11n, props.channel)))
+							return;
 
-			//											  SEND_VOICE_MESSAGES								 SEND_MESSAGES
-			if (args.channel.guild_id && !(PermissionStore.can(1n << 46n, args.channel) && PermissionStore.can(1n << 11n, args.channel)))
-				return;
-
-			ret.props.children.push(ContextMenu.buildItem({
-				id: "bd-send-vmsg",
-				label: createElement("div", {
-					style: {
-						display: "flex",
-						alignItems: "center",
-						verticalAlign: "middle"
-					},
-					children: [
-						//microphone icon
-						createElement(Microphone, {
-							height: 24,
-							width: 24
-						}),
-						//option name
-						createElement("div", {
-							children: "Send Voice Message",
-							style: {
-								marginLeft: "8px",
-								fontSize: "14px",
+						res.props.children.push(ContextMenu.buildItem({
+							id: "bd-send-vmsg",
+							label: createElement("div", {
+								style: {
+									display: "flex",
+									alignItems: "center",
+									verticalAlign: "middle"
+								},
+								children: [
+									//microphone icon
+									createElement(Microphone, {
+										height: 20,
+										width: 20
+									}),
+									//option name
+									createElement("div", {
+										children: "Send Voice Message",
+										style: {
+											marginLeft: "8px",
+											fontSize: "14px",
+										}
+									})
+								]
+							}),
+							action: () => {
+								ModalUtils.openModal(modalProps => createElement(VoiceMessageModal,{modalProps,shouldSkipMetadata: settings.skipMetadata}),{
+									onCloseCallback: () => {
+										//ensure we stop recording if the user suddenly closes the modal without pressing stop
+										discordVoice.stopLocalAudioRecording(filePath => {return;})
+									}
+								});
 							}
-						})
-					]
-				}),
-				action: () => {
-					ModalUtils.openModal(modalProps => createElement(VoiceMessageModal,{modalProps,shouldSkipMetadata: settings.skipMetadata}),{
-						onCloseCallback: () => {
-							//ensure we stop recording if the user suddenly closes the modal without pressing stop
-							discordVoice.stopLocalAudioRecording(filePath => {return;})
-						}
-					});
+						}))
+					})
+
+					return ret;
 				}
-			}))
+			});
 		});
 	}
 
 	patchVoiceMessage() { // Adds voiceDownload button to VoiceMessage elements
-		Patcher.after(this.meta.name, VoiceMessage, "type", (_, [args], ret) => {
-			let href = "#";
-			if(args?.item?.downloadUrl != undefined) href = args.item.downloadUrl;
-			else if(args?.src != undefined) href = args.src;
-
-			ret.props.children.push(React.createElement("a", {
-				className: "bd-voice-download",
-				href,
-				onClick: function (e) { e => e.stopPropagation() },
-				ariaLabel: "Download voice message",
-				target: "_blank",
-				download: "voice-message.ogg",
-				children: React.createElement("svg", {
-					height: "24",
-					width: "24",
-					viewBox: "0 0 24 24",
-					fill: "currentColor",
-					children: React.createElement("path", {
-						d: "M12 2a1 1 0 0 1 1 1v10.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V3a1 1 0 0 1 1-1ZM3 20a1 1 0 1 0 0 2h18a1 1 0 1 0 0-2H3Z"
+		Patcher.after(VoiceMessage, "type", (_, [outerArgs], outerRet) => {
+			nodePatcher.patch(outerRet, (args,ret) => {
+				let href = "#";
+				if(args?.item?.downloadUrl != undefined) href = args.item.downloadUrl;
+				else if(args?.src != undefined) href = args.src;
+	
+				ret.props.children.push(React.createElement("a", {
+					className: "bd-voice-download",
+					href,
+					onClick: function (e) { e => e.stopPropagation() },
+					ariaLabel: "Download voice message",
+					target: "_blank",
+					download: "voice-message.ogg",
+					children: React.createElement("svg", {
+						height: "24",
+						width: "24",
+						viewBox: "0 0 24 24",
+						fill: "currentColor",
+						children: React.createElement("path", {
+							d: "M12 2a1 1 0 0 1 1 1v10.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V3a1 1 0 0 1 1-1ZM3 20a1 1 0 1 0 0 2h18a1 1 0 1 0 0-2H3Z"
+						})
 					})
-				})
-			}));
+				}));
+			});
 		});
 	}
 
 
 	start() {
-		Patcher.unpatchAll(this.meta.name);
+		Patcher.unpatchAll();
 		DOM.addStyle(this.meta.name, `
 			.bd-vmsg-modal {
 				padding: 1em;
@@ -673,7 +693,7 @@ module.exports = class VoiceMessages {
 			}
 						
 			.bd-vmsg-preview {
-				color: var(--text-default);
+				color: var(--control-primary-text-default);
 				border-radius: 24px;
 				background-color: var(--background-base-lower);
 				position: relative;
@@ -723,19 +743,25 @@ module.exports = class VoiceMessages {
 			.bd-voice-download:hover {
 				color: var(--interactive-text-active);
 			}
+			
+			.bd-microphone {
+				box-sizing
+				display: inline;
+				color: var(--interactive-text-default);
+			}
 		`);
 
 		try{
             //load settings from config
-            settings = Object.assign({}, defaultSettings, Data.load(this.meta.name, "settings"));
+            settings = Object.assign({}, defaultSettings, Data.load("settings"));
         }catch(err){
             //The super mega awesome data-unfucker 9000
-            Logger.warn(this.meta.name, err);
-            Logger.info(this.meta.name, "Error parsing JSON. Resetting file to default...");
+            Logger.warn(err);
+            Logger.info("Error parsing JSON. Resetting file to default...");
             //watch this shit yo
             require("fs").rmSync(require("path").join(Plugins.folder, `${this.meta.name}.config.json`));
-            Plugins.reload(this.meta.name);
-            Plugins.enable(this.meta.name);
+            Plugins.reload();
+            Plugins.enable();
             return;
         }
 
@@ -743,7 +769,7 @@ module.exports = class VoiceMessages {
 		try{
             let currentVersionInfo = {version: this.meta.version, hasShownChangelog: false};
             try{
-                currentVersionInfo = Object.assign({}, {version: this.meta.version, hasShownChangelog: false}, Data.load(this.meta.name, "currentVersionInfo"));
+                currentVersionInfo = Object.assign({}, {version: this.meta.version, hasShownChangelog: false}, Data.load("currentVersionInfo"));
             }catch(err){
                 currentVersionInfo = {hasShownChangelog: false};
             }
@@ -765,17 +791,17 @@ module.exports = class VoiceMessages {
                 currentVersionInfo.hasShownChangelog = true;
             }
 			
-			Data.save(this.meta.name, "currentVersionInfo", currentVersionInfo);
+			Data.save("currentVersionInfo", currentVersionInfo);
         }
         catch(err){
-            Logger.error(this.meta.name, err);
+            Logger.error(err);
         }
 		this.saveAndUpdate();
 	}
 
 	stop() {
-		Patcher.unpatchAll(this.meta.name);
-		DOM.removeStyle(this.meta.name);
+		Patcher.unpatchAll();
+		DOM.removeStyle();
 	}
 };
 // #endregion
