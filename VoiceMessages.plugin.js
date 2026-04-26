@@ -123,7 +123,7 @@ const [
 	{filter: Webpack.Filters.byKeys('getSendMessageOptionsForReply')},
 	{filter: Webpack.Filters.byKeys("dispatch", "subscribe"), searchExports:true},
 	{filter: m => typeof m === "object" && "delete" in m && "patch" in m, searchExports:false},
-	{filter: Webpack.Filters.bySource("Send Attachment"), searchExports:true, defaultExport:true, map: {
+	{filter: Webpack.Filters.bySource("Send Attachment"), map: {
 		ChannelAttach: x=>x.type
 	}},
 	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true},
