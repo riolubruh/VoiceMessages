@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.13
+ * @version 0.1.14
  * @invite HfFxUbgsBc
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,19 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.13",
+		"version": "0.1.14",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.13",
+			title: "0.1.14",
 			items: [
-				"Fix plugin not working after recent Discord update.",
-				"Fix incorrect colors in modal and popout menu.",
-				"Stop using this.meta.name so much.",
-				"Adjust size of microphone icon in popout menu to be more in line with the existing ones."
+				"Fix plugin not working on Discord Canary on startup."
 			]
 		}
 	],
@@ -109,7 +106,6 @@ const [
 	MessageActions,
 	Dispatcher,
 	HTTP,
-	PopoutMenuModule,
 	SnowflakeUtils,
 	ModalUtils,
 	ModalElements,
@@ -123,9 +119,6 @@ const [
 	{filter: Webpack.Filters.byKeys('getSendMessageOptionsForReply')},
 	{filter: Webpack.Filters.byKeys("dispatch", "subscribe"), searchExports:true},
 	{filter: m => typeof m === "object" && "delete" in m && "patch" in m, searchExports:false},
-	{filter: Webpack.Filters.bySource("Send Attachment"), map: {
-		ChannelAttach: x=>x.type
-	}},
 	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true},
 	{filter: Webpack.Filters.byKeys('openModal')},
 	{filter: Webpack.Filters.bySource("Wrap.NO_WRAP,className:", "let{headerId:"), map: {
@@ -140,6 +133,7 @@ const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
 const fs = require("fs");
 const path = require("path");
 const nodePatcher = ReactUtils.createNodePatcher();
+let controller = new AbortController();
 // #endregion
 
 // #region Global Functions
@@ -583,66 +577,103 @@ module.exports = class VoiceMessages {
 	}
 
 	saveAndUpdate() { //Saves and updates settings and runs functions
+		controller.abort();
+        controller = new AbortController();
 		Data.save("settings", settings);
 		Patcher.unpatchAll();	
 		this.patchPopoutMenu();
 		if (settings.voiceDownload) this.patchVoiceMessage();
 	}
 
-	patchPopoutMenu() { //Adds the "Send voice message" button to the popout menu
-		Patcher.after(PopoutMenuModule?.ChannelAttach, "type", (_, [args], ret) => {
-			const child = ret?.props?.children?.[1]?.props?.children;
+	// Finds and returns the key of an object in a module/object using a filter, and warns if there is a potential problem. Useful when patching lazy loaded modules.
+	// If filter variable is a string, it uses an includes string filter.
+	findMangledName(module, filter, debugInfo){
+        if(module){
+            if(typeof filter === "string"){
+                filter = (x) => x.toString?.().includes?.(filter);
+            }
+            let keys = Object.keys(module);
+            let values = Object.values(module);
+            
+            let index = values.findIndex(filter);
+    
+            if(index >= 0) return keys[index];
+            else{
+                Logger.warn(`Couldn't find name from module for function ${debugInfo} because the filter returned no results.\nFilter: `, filter, "\n", module);
+                return null;
+            };
+        }else{
+            Logger.warn(`Couldn't find name from module for function ${debugInfo} because the module was undefined. This is not necessarily an error, it may be caused by lazy-loaded modules not being ready yet.`);
+            return null;
+        }
+    }
 
-			if (!child) return;
+	async patchPopoutMenu() { //Adds the "Send voice message" button to the popout menu
+		if(!this.PopoutMenuModule) this.PopoutMenuModule = await Webpack.waitForModule(Webpack.Filters.bySource("Send Attachment"), {signal: controller.signal})
+		if(!this.PopoutMenuModule){
+			Logger.error("PopoutMenuModule is undefined.");
+			return;
+		}
 
-			ret.props.children[1].props.children = React.cloneElement(child, {
-				renderPopout(...args) {
-					const ret = child.props.renderPopout.apply(this, args);
-					
-					nodePatcher.patch(ret, (props,res) => {
-						//											  SEND_VOICE_MESSAGES								 SEND_MESSAGES
-						if (props.channel.guild_id && !(PermissionStore.can(1n << 46n, props.channel) && PermissionStore.can(1n << 11n, props.channel)))
-							return;
+		let name = this.findMangledName(this.PopoutMenuModule, x=>x, "PopoutMenuModule");
 
-						res.props.children.push(ContextMenu.buildItem({
-							id: "bd-send-vmsg",
-							label: createElement("div", {
-								style: {
-									display: "flex",
-									alignItems: "center",
-									verticalAlign: "middle"
-								},
-								children: [
-									//microphone icon
-									createElement(Microphone, {
-										height: 20,
-										width: 20
-									}),
-									//option name
-									createElement("div", {
-										children: "Send Voice Message",
-										style: {
-											marginLeft: "8px",
-											fontSize: "14px",
+		if(name){
+			Patcher.after(this.PopoutMenuModule[name], "type", (_, [args], ret) => {
+				const child = ret?.props?.children?.[1]?.props?.children;
+	
+				if (!child) return;
+	
+				ret.props.children[1].props.children = React.cloneElement(child, {
+					renderPopout(...args) {
+						const ret = child.props.renderPopout.apply(this, args);
+						
+						nodePatcher.patch(ret, (props,res) => {
+							//											  SEND_VOICE_MESSAGES								 SEND_MESSAGES
+							if (props.channel.guild_id && !(PermissionStore.can(1n << 46n, props.channel) && PermissionStore.can(1n << 11n, props.channel)))
+								return;
+	
+							res.props.children.push(ContextMenu.buildItem({
+								id: "bd-send-vmsg",
+								label: createElement("div", {
+									style: {
+										display: "flex",
+										alignItems: "center",
+										verticalAlign: "middle"
+									},
+									children: [
+										//microphone icon
+										createElement(Microphone, {
+											height: 20,
+											width: 20
+										}),
+										//option name
+										createElement("div", {
+											children: "Send Voice Message",
+											style: {
+												marginLeft: "8px",
+												fontSize: "14px",
+											}
+										})
+									]
+								}),
+								action: () => {
+									ModalUtils.openModal(modalProps => createElement(VoiceMessageModal,{modalProps,shouldSkipMetadata: settings.skipMetadata}),{
+										onCloseCallback: () => {
+											//ensure we stop recording if the user suddenly closes the modal without pressing stop
+											discordVoice.stopLocalAudioRecording(filePath => {return;})
 										}
-									})
-								]
-							}),
-							action: () => {
-								ModalUtils.openModal(modalProps => createElement(VoiceMessageModal,{modalProps,shouldSkipMetadata: settings.skipMetadata}),{
-									onCloseCallback: () => {
-										//ensure we stop recording if the user suddenly closes the modal without pressing stop
-										discordVoice.stopLocalAudioRecording(filePath => {return;})
-									}
-								});
-							}
-						}))
-					})
-
-					return ret;
-				}
+									});
+								}
+							}))
+						})
+	
+						return ret;
+					}
+				});
 			});
-		});
+		}else{
+			Logger.error("PopoutMenuModule name is undefined");
+		}
 	}
 
 	patchVoiceMessage() { // Adds voiceDownload button to VoiceMessage elements
@@ -675,6 +706,7 @@ module.exports = class VoiceMessages {
 
 
 	start() {
+		Logger.info("(v" + this.meta.version + ") has started.");
 		Patcher.unpatchAll();
 		DOM.addStyle(this.meta.name, `
 			.bd-vmsg-modal {
@@ -801,7 +833,9 @@ module.exports = class VoiceMessages {
 
 	stop() {
 		Patcher.unpatchAll();
+		controller.abort();
 		DOM.removeStyle();
+		Logger.info("(v" + this.meta.version + ") has stopped.");
 	}
 };
 // #endregion
