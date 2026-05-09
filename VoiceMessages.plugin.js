@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.14
+ * @version 0.1.15
  * @invite HfFxUbgsBc
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.14",
+		"version": "0.1.15",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.14",
+			title: "0.1.15",
 			items: [
-				"Fix plugin not working on Discord Canary on startup."
+				"Add some more error checking to prevent crashes in case of unusual circumstances."
 			]
 		}
 	],
@@ -628,8 +628,12 @@ module.exports = class VoiceMessages {
 						const ret = child.props.renderPopout.apply(this, args);
 						
 						nodePatcher.patch(ret, (props,res) => {
+							if(!res?.props?.children){
+								Logger.error("Channel Attach Popout's children are undefined!");
+								return;
+							}
 							//											  SEND_VOICE_MESSAGES								 SEND_MESSAGES
-							if (props.channel.guild_id && !(PermissionStore.can(1n << 46n, props.channel) && PermissionStore.can(1n << 11n, props.channel)))
+							if(props?.channel?.guild_id && !(PermissionStore.can(1n << 46n, props?.channel) && PermissionStore.can(1n << 11n, props?.channel)))
 								return;
 	
 							res.props.children.push(ContextMenu.buildItem({
@@ -683,6 +687,11 @@ module.exports = class VoiceMessages {
 				if(args?.item?.downloadUrl != undefined) href = args.item.downloadUrl;
 				else if(args?.src != undefined) href = args.src;
 	
+				if(!ret?.props?.children){
+					Logger.error("VoiceMessage element's children are undefined!");
+					return;
+				}
+
 				ret.props.children.push(React.createElement("a", {
 					className: "bd-voice-download",
 					href,
