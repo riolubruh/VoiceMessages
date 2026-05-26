@@ -265,7 +265,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 	const [isRecording, setRecording] = useState(false);
 	const [blob, setBlob] = useState();
 	const [blobUrl, setBlobUrl] = useObjectUrl();
-	const [sending, setSending] = useState();
+	const [sending, setSending] = useState(false);
 
 	useEffect(() => () => {
 		if (blobUrl)
