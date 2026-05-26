@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.15
+ * @version 0.1.16
  * @invite HfFxUbgsBc
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.15",
+		"version": "0.1.16",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.15",
+			title: "0.1.16",
 			items: [
-				"Add some more error checking to prevent crashes in case of unusual circumstances."
+				"Prevent user from accidentally clicking the send button multiple times."
 			]
 		}
 	],
@@ -265,6 +265,7 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 	const [isRecording, setRecording] = useState(false);
 	const [blob, setBlob] = useState();
 	const [blobUrl, setBlobUrl] = useObjectUrl();
+	const [sending, setSending] = useState();
 
 	useEffect(() => () => {
 		if (blobUrl)
@@ -408,9 +409,10 @@ function VoiceMessageModal({ modalProps, shouldSkipMetadata }) {
 			createElement(ModalElements.ModalFooter, {
 				children: [
 					createElement(Components.Button, {
-						disabled: !blob,
+						disabled: !blob || sending,
 						onClick: async () => {
 							modalProps.onClose();
+							setSending(true);
 							sendAudio(blob, meta);
 							UI.showToast("Now sending voice message... Please be patient", { type: "info" });
 						},
