@@ -231,7 +231,6 @@ async function sendAudio(blob, meta) { //Sends the voice message
 	const channelId = SelectedChannelStore.getCurrentlySelectedChannelId();
 	const reply = PendingReplyStore.getPendingReply(channelId);
 	if (reply) Dispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
-	console.log(reply);
 
 	const upload = await new CloudUploader({
 		file: new File([blob], "voice-message.ogg", { type: "audio/ogg; codecs=opus" }),
