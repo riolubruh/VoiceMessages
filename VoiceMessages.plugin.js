@@ -3,7 +3,7 @@
  * @author Riolubruh
  * @authorLink https://github.com/riolubruh
  * @description Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.
- * @version 0.1.16
+ * @version 0.1.17
  * @invite HfFxUbgsBc
  * @source https://github.com/riolubruh/VoiceMessages
  */
@@ -58,16 +58,16 @@ const config = {
 			"discord_id": "359063827091816448",
 			"github_username": "riolubruh"
 		}],
-		"version": "0.1.16",
+		"version": "0.1.17",
 		"description": "Allows you to send voice messages like on mobile. To do so, click the upload button and click Send Voice Message.",
 		"github": "https://github.com/riolubruh/VoiceMessages",
 		"github_raw": "https://raw.githubusercontent.com/riolubruh/VoiceMessages/main/VoiceMessages.plugin.js"
 	},
 	changelog: [
 		{
-			title: "0.1.16",
+			title: "0.1.17",
 			items: [
-				"Prevent user from accidentally clicking the send button multiple times."
+				"Fix modal not opening after Discord update."
 			]
 		}
 	],
@@ -91,7 +91,7 @@ let settings = {};
 
 // #region Modules
 const { React, Webpack, UI, Patcher, Data, ContextMenu, Logger, DOM, Plugins, Components, ReactUtils } = new BdApi("VoiceMessages");
-const { createElement, useState, useEffect, useMemo } = React;
+const { createElement, useState, useEffect, useMemo, cloneElement } = React;
 
 const {
 	SelectedChannelStore,
@@ -120,7 +120,12 @@ const [
 	{filter: Webpack.Filters.byKeys("dispatch", "subscribe"), searchExports:true},
 	{filter: m => typeof m === "object" && "delete" in m && "patch" in m, searchExports:false},
 	{filter: Webpack.Filters.byKeys('fromTimestamp'), searchExports:true},
-	{filter: Webpack.Filters.byKeys('openModal')},
+	{filter: Webpack.Filters.bySource(".modalKey?"), map: {
+			openModalLazy: Webpack.Filters.byStrings(".modalKey?"),
+			openModal: Webpack.Filters.byStrings(",instant:"),
+			closeModal: Webpack.Filters.byStrings(".onCloseCallback()"),
+			closeAllModals: Webpack.Filters.byStrings(".getState();for")
+		}},
 	{filter: Webpack.Filters.bySource("Wrap.NO_WRAP,className:", "let{headerId:"), map: {
 		ModalRoot: Webpack.Filters.byStrings("fullscreenOnMobile", "scale(1)"),
 		ModalHeader: Webpack.Filters.byStrings("Wrap.NO_WRAP,className:", "let{headerId:"),
@@ -226,6 +231,7 @@ async function sendAudio(blob, meta) { //Sends the voice message
 	const channelId = SelectedChannelStore.getCurrentlySelectedChannelId();
 	const reply = PendingReplyStore.getPendingReply(channelId);
 	if (reply) Dispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
+	console.log(reply);
 
 	const upload = await new CloudUploader({
 		file: new File([blob], "voice-message.ogg", { type: "audio/ogg; codecs=opus" }),
@@ -625,7 +631,7 @@ module.exports = class VoiceMessages {
 	
 				if (!child) return;
 	
-				ret.props.children[1].props.children = React.cloneElement(child, {
+				ret.props.children[1].props.children = cloneElement(child, {
 					renderPopout(...args) {
 						const ret = child.props.renderPopout.apply(this, args);
 						
@@ -694,19 +700,19 @@ module.exports = class VoiceMessages {
 					return;
 				}
 
-				ret.props.children.push(React.createElement("a", {
+				ret.props.children.push(createElement("a", {
 					className: "bd-voice-download",
 					href,
 					onClick: function (e) { e => e.stopPropagation() },
 					ariaLabel: "Download voice message",
 					target: "_blank",
 					download: "voice-message.ogg",
-					children: React.createElement("svg", {
+					children: createElement("svg", {
 						height: "24",
 						width: "24",
 						viewBox: "0 0 24 24",
 						fill: "currentColor",
-						children: React.createElement("path", {
+						children: createElement("path", {
 							d: "M12 2a1 1 0 0 1 1 1v10.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V3a1 1 0 0 1 1-1ZM3 20a1 1 0 1 0 0 2h18a1 1 0 1 0 0-2H3Z"
 						})
 					})
